@@ -1,0 +1,14 @@
+@override
+Widget build(BuildContext context) {
+  return MaterialApp(
+    title: 'RMUTT Map',
+    theme: ThemeData(
+      colorScheme: ColorScheme.fromSwatch(
+        primarySwatch: Colors.blue,
+        accentColor: Colors.deepOrangeAccent,
+      ),
+      visualDensity: VisualDensity.adaptivePlatformDensity,
+    ),
+    home: const MapSample(),
+  );
+}

@@ -1,0 +1,464 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:maps/Community/provider/auth_provider.dart';
+import 'package:maps/firebase_options.dart';
+import 'package:provider/provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:location/location.dart';
+import 'package:http/http.dart' as http;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+      ],
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: MapSample(),
+        title: 'RMUTT Map',
+        theme: ThemeData(
+          primarySwatch: Colors.lightBlue,
+        ),
+      ),
+    );
+  }
+}
+
+class MapSample extends StatefulWidget {
+  const MapSample({Key? key}) : super(key: key);
+
+  @override
+  State<MapSample> createState() => MapSampleState();
+}
+
+class MapSampleState extends State<MapSample> {
+  GoogleMapController? _controller;
+  final LatLng _startLocation =
+      const LatLng(14.039614599717076, 100.72766444381722);
+  Set<Polyline> _polylines = {};
+  List<Marker> _markers = [];
+  Location _location = Location();
+  List<Map<String, dynamic>> _steps = [];
+  bool _isCompleted = false;
+  Marker? _currentLocationMarker;
+  late StreamSubscription<LocationData> _locationSubscription;
+
+  @override
+  void dispose() {
+    _locationSubscription.cancel();
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // showCurrentLocation();
+    _markers = [
+      Marker(
+        markerId: const MarkerId('Park'),
+        position: const LatLng(14.039357906418308, 100.72854893532674),
+        infoWindow: const InfoWindow(
+          title: 'Park',
+          snippet: 'This is the point of interest.',
+        ),
+        onTap: () => _onMarkerTap(
+          const LatLng(14.039357906418308, 100.72854893532674),
+          'Park',
+        ),
+      ),
+      Marker(
+        markerId: const MarkerId('School'),
+        position: const LatLng(14.039389698288419, 100.72671853695797),
+        infoWindow: const InfoWindow(
+          title: 'School',
+          snippet: 'This is the point of interest.',
+        ),
+        onTap: () => _onMarkerTap(
+          const LatLng(14.039389698288419, 100.72671853695797),
+          'School',
+        ),
+      ),
+      Marker(
+        markerId: const MarkerId('Home'),
+        position: const LatLng(14.024915532851647, 100.59849767267433),
+        infoWindow: const InfoWindow(
+          title: 'Home',
+          snippet: 'This is the point of interest.',
+        ),
+        onTap: () => _onMarkerTap(
+          const LatLng(14.024915532851647, 100.59849767267433),
+          'Home',
+        ),
+      ),
+      Marker(
+        markerId: const MarkerId('Gym'),
+        position: const LatLng(14.039635115989103, 100.72873448118224),
+        infoWindow: const InfoWindow(
+          title: 'Gym',
+          snippet: 'This is the point of interest.',
+        ),
+        onTap: () => _onMarkerTap(
+          const LatLng(14.039635115989103, 100.72873448118224),
+          'Gym',
+        ),
+      ),
+      Marker(
+        markerId: const MarkerId('Path School'),
+        position: const LatLng(14.039576617250612, 100.72729061003821),
+        infoWindow: const InfoWindow(
+          title: 'Path',
+          snippet: 'This is the point of interest.',
+        ),
+        onTap: () => _onMarkerTap(
+          const LatLng(14.039576617250612, 100.72729061003821),
+          'Path School',
+        ),
+      ),
+      Marker(
+        markerId: const MarkerId('sssd'),
+        position: const LatLng(14.0332845, 100.7295636),
+        infoWindow: const InfoWindow(
+          title: 'ssd',
+          snippet: 'This is the point of interest.',
+        ),
+        onTap: () => _onMarkerTap(
+          const LatLng(14.0332845, 100.7295636),
+          'sssd',
+        ),
+      ),
+    ];
+
+    _locationSubscription =
+        _location.onLocationChanged.listen((LocationData currentLocation) {
+      _updateCurrentLocationMarker(currentLocation);
+      _updateRoute(currentLocation.latitude!, currentLocation.longitude!);
+    });
+  }
+
+  void _updateCurrentLocationMarker(LocationData currentLocation) {
+    if (_controller != null) {
+      setState(() {
+        _currentLocationMarker = Marker(
+          markerId: const MarkerId('currentLocation'),
+          position:
+              LatLng(currentLocation.latitude!, currentLocation.longitude!),
+          infoWindow: const InfoWindow(title: 'Current Location'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        ); // Add or update current location marker
+        _markers.removeWhere(
+            (marker) => marker.markerId.value == 'curๅrentLocation');
+        _markers.add(_currentLocationMarker!);
+      });
+
+      _controller!.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(
+            target:
+                LatLng(currentLocation.latitude!, currentLocation.longitude!),
+            zoom: 17.5),
+      ));
+    }
+  }
+
+  Future<void> _fetchAndCalculateRoutes(
+      LatLng endLocation, String destination) async {
+    final String url =
+        'https://355c12d0-f697-4646-9c07-0715c29de092-00-b95cq7qjvlj7.pike.replit.dev/Route';
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json['status'] == 'OK' &&
+          json['routes'] != null &&
+          json['routes'].isNotEmpty) {
+        final route = json['routes'][0];
+
+        // Debug output
+        print("Received route data: ${route['data']}");
+
+        final matchingData = route['data'].firstWhere(
+          (data) =>
+              data['end_address'] != null &&
+              data['end_address']
+                  .toString()
+                  .toLowerCase()
+                  .contains(destination.toLowerCase()),
+          orElse: () => null,
+        );
+
+        // Debug output
+        print("Matching data: $matchingData");
+
+        if (matchingData != null) {
+          final steps = matchingData['steps'];
+          final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
+
+          setState(() {
+            _steps = List<Map<String, dynamic>>.from(steps);
+            _polylines.clear(); // Clear all existing polylines
+            _addPolyline(polylineCoordinates);
+          });
+        } else {
+          print('No matching data found for destination: $destination');
+          // Find nearest point
+          _findNearestRouteAndDisplay(endLocation, route['data']);
+        }
+      } else {
+        print('No routes found in the response or status is not OK.');
+      }
+    } else {
+      print(
+          'Failed to fetch initial route. Status code: ${response.statusCode}');
+    }
+  }
+
+  void _findNearestRouteAndDisplay(
+      LatLng endLocation, List<dynamic> routeData) {
+    double minDistance = double.infinity;
+    Map<String, dynamic>? nearestRoute;
+
+    for (var data in routeData) {
+      LatLng routeStartLocation =
+          LatLng(data['start_location']['lat'], data['start_location']['lng']);
+      double distance = _calculateDistance(_startLocation, routeStartLocation);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestRoute = data;
+      }
+    }
+
+    if (nearestRoute != null) {
+      final steps = nearestRoute['steps'];
+      final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
+
+      setState(() {
+        _steps = List<Map<String, dynamic>>.from(steps);
+        _polylines.clear(); // Clear all existing polylines
+        _addPolyline(polylineCoordinates);
+      });
+
+      print('Displaying route to the nearest point.');
+    } else {
+      print('No suitable route found.');
+    }
+  }
+
+  void _onMarkerTap(LatLng endLocation, String destination) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Show Route'),
+          content: Text('Do you want to display the route to this point?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _fetchAndCalculateRoutes(endLocation, destination);
+              },
+              child: Text('Yes'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('No'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _addPolyline(List<LatLng> polylineCoordinates) {
+    final String polylineIdVal =
+        'polyline_id_${DateTime.now().millisecondsSinceEpoch}';
+    setState(() {
+      _polylines.add(Polyline(
+        polylineId: PolylineId(polylineIdVal),
+        width: 5,
+        color: Colors.blue,
+        points: polylineCoordinates,
+      ));
+    });
+  }
+
+  void _updateRoute(double currentLatitude, double currentLongitude) {
+    LatLng currentLocation = LatLng(currentLatitude, currentLongitude);
+
+    // Create a new list of remaining steps
+    List<Map<String, dynamic>> remainingSteps = [];
+    bool exitedBounds = false;
+
+    for (var step in _steps) {
+      LatLng startLocation =
+          LatLng(step['start_location']['lat'], step['start_location']['lng']);
+      LatLng endLocation =
+          LatLng(step['end_location']['lat'], step['end_location']['lng']);
+      double distanceToStart =
+          _calculateDistance(currentLocation, startLocation);
+      double distanceToEnd = _calculateDistance(currentLocation, endLocation);
+
+      // Debug output to check the calculated distances
+      print('Distance to step start location: $distanceToStart');
+      print('Distance to step end location: $distanceToEnd');
+
+      // Check if currentLocation is outside the polyline bounds
+      if (distanceToEnd > 0.015) {
+        exitedBounds = true;
+      }
+
+      if (distanceToStart <= 0.015 && distanceToEnd > 0.0) {
+        // Gradually reduce the last polyline step
+        double fraction =
+            distanceToStart / _calculateDistance(startLocation, endLocation);
+        double newLat = startLocation.latitude +
+            fraction * (endLocation.latitude - startLocation.latitude);
+        double newLng = startLocation.longitude +
+            fraction * (endLocation.longitude - startLocation.longitude);
+
+        _redrawPolyline([
+          LatLng(newLat, newLng),
+          endLocation,
+        ]);
+
+        // Debug output to confirm polyline update
+        print('Updated polyline with remaining steps');
+
+        // Exit the loop after updating the polyline
+        return;
+      }
+
+      // Add the step to remainingSteps if needed
+      if (distanceToEnd > 0.0) {
+        remainingSteps.add(step);
+      }
+    }
+
+    // If no steps matched the condition, clear all polylines
+    if (remainingSteps.isEmpty) {
+      _polylines.clear();
+      _isCompleted = true;
+
+      // Debug output to confirm route completion
+      print('Route completed');
+    }
+  }
+
+  List<LatLng> _extractCoordinates(List<dynamic> steps) {
+    List<LatLng> polylineCoordinates = [];
+    for (var step in steps) {
+      LatLng startLocation =
+          LatLng(step['start_location']['lat'], step['start_location']['lng']);
+      LatLng endLocation =
+          LatLng(step['end_location']['lat'], step['end_location']['lng']);
+
+      polylineCoordinates.add(startLocation);
+      polylineCoordinates.add(endLocation);
+    }
+    return polylineCoordinates;
+  }
+
+  double _calculateDistance(LatLng start, LatLng end) {
+    var p = 0.017453292519943295;
+    var c = cos;
+    var a = 0.5 -
+        c((end.latitude - start.latitude) * p) / 2 +
+        c(start.latitude * p) *
+            c(end.latitude * p) *
+            (1 - c((end.longitude - start.longitude) * p)) /
+            2;
+    return 12742 * asin(sqrt(a));
+  }
+
+  void _redrawPolyline(List<LatLng> newPoints) {
+    if (_polylines.isNotEmpty) {
+      Polyline matchingPolyline = _polylines.first;
+      _polylines.clear();
+      _polylines.add(Polyline(
+        polylineId: matchingPolyline.polylineId,
+        width: matchingPolyline.width,
+        color: matchingPolyline.color,
+        points: newPoints,
+      ));
+    }
+  }
+
+    void showCurrentLocation() async {
+    Location location = Location();
+
+    bool _serviceEnabled;
+    PermissionStatus _permissionGranted;
+    LocationData _locationData;
+
+    _serviceEnabled = await location.serviceEnabled();
+ 
+    if (!_serviceEnabled) {
+      _serviceEnabled = await location.requestService();
+      if (!_serviceEnabled) {
+        return;
+      }
+    }
+
+    _permissionGranted = await location.hasPermission();
+    if (_permissionGranted == PermissionStatus.denied) {
+      _permissionGranted = await location.requestPermission();
+      if (_permissionGranted != PermissionStatus.granted) {
+        return;
+      }
+    }
+
+    _locationData = await location.getLocation();
+
+    final currentLocation =
+        LatLng(_locationData.latitude ?? 0.0, _locationData.longitude ?? 0.0);
+
+    _updateCurrentLocationMarker(_locationData);
+
+    _controller?.animateCamera(CameraUpdate.newLatLng(currentLocation));
+    location.onLocationChanged.listen((LocationData currentLocation) {
+      print(currentLocation);
+      final _currentLocation = LatLng(
+          currentLocation.latitude ?? 0.0, currentLocation.longitude ?? 0.0);
+      _updateCurrentLocationMarker(currentLocation);
+      _updateRoute(currentLocation.latitude!, currentLocation.longitude!);
+      _controller?.animateCamera(CameraUpdate.newLatLng(_currentLocation));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Google Maps Example'),
+      ),
+      body: GoogleMap(
+        onMapCreated: (GoogleMapController controller) {
+          _controller = controller;
+          setState(() {});
+        },
+        initialCameraPosition: CameraPosition(
+          target: _startLocation,
+          zoom: 17.5,
+        ),
+        polylines: _polylines,
+        markers: Set<Marker>.of(_markers),
+      ),
+    );
+  }
+}
