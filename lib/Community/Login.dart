@@ -17,7 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
     String password = _passwordController.text.trim();
 
     try {
-      // ค้นหา user โดยใช้ username
+
       QuerySnapshot querySnapshot = await FirebaseFirestore.instance
           .collection('usersRMUTT')
           .where('username', isEqualTo: username)
@@ -29,9 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
         String storedPassword = userDoc['password'];
         String name = userDoc['name'];
 
-        // ตรวจสอบ password
         if (storedPassword == password) {
-          // หากเข้าสู่ระบบสำเร็จ ส่งค่า username และ name ไปยัง ChatScreen
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => ChatScreen(

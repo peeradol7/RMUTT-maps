@@ -69,9 +69,10 @@ android {
         release {
             signingConfig signingConfigs.debug
             shrinkResources false
-             minifyEnabled true
-            useProguard true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true //ก่อนหน้า falseกก
+            
+            useProguard true//ลบได้เ
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'//ลบได้
         }
     }
 }

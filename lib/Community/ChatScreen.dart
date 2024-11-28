@@ -26,7 +26,6 @@ class _ChatScreenState extends State<ChatScreen> {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // Clear the message input field
       _messageController.clear();
     }
   }

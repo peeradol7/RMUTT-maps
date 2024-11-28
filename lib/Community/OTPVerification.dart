@@ -26,7 +26,6 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
   final AuthController _authController = AuthController();
 
   bool isValidUsername(String username) {
-    // Username must contain only English letters and numbers, and be at least 6 characters long
     return RegExp(r'^[a-zA-Z0-9]{6,}$').hasMatch(username);
   }
 

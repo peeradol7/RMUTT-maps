@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,9 +8,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'package:location/location.dart';
+import 'package:maps/CalculateController.dart';
 import 'package:maps/Community/Main.dart';
+import 'package:maps/MarkerController.dart';
+import 'package:maps/RoutesController.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
@@ -76,6 +76,7 @@ class MapSampleState extends State<MapSample> {
   Location locationController = Location();
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
+  final MarkerController _markerController = MarkerController();
   @override
   void initState() {
     super.initState();
@@ -194,7 +195,7 @@ class MapSampleState extends State<MapSample> {
           children: [
             IconButton(
               icon: Icon(Icons.menu),
-              onPressed: _showMenu, // แก้ไขการเรียกฟังก์ชันนี้
+              onPressed: _showMenu,
             ),
             IconButton(
               icon: Icon(Icons.comment),
@@ -408,91 +409,18 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-  Future<void> _fetchAndCalculateRoutes(
-      LatLng endLocation, String destination) async {
-    final String url =
-        'https://355c12d0-f697-4646-9c07-0715c29de092-00-b95cq7qjvlj7.pike.replit.dev/Route';
-    final response = await http.get(Uri.parse(url));
-
-    if (response.statusCode == 200) {
-      final json = jsonDecode(response.body);
-      if (json['status'] == 'OK' &&
-          json['routes'] != null &&
-          json['routes'].isNotEmpty) {
-        final route = json['routes'][0];
-
-        // Debug output
-        print("Received route data: ${route['data']}");
-
-        final matchingData = route['data'].firstWhere(
-          (data) =>
-              data['end_address'] != null &&
-              data['end_address']
-                  .toString()
-                  .toLowerCase()
-                  .contains(destination.toLowerCase()),
-          orElse: () => null,
-        );
-
-        // Debug output
-        print("Matching data: $matchingData");
-
-        if (matchingData != null) {
-          final steps = matchingData['steps'];
-          final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
-
-          setState(() {
-            _steps = List<Map<String, dynamic>>.from(steps);
-            _polylines.clear(); // Clear all existing polylines
-            _addPolyline(polylineCoordinates);
-          });
-        } else {
-          print('No matching data found for destination: $destination');
-          // Find nearest point
-          _findNearestRouteAndDisplay(endLocation, route['data']);
-        }
-      } else {
-        print('No routes found in the response or status is not OK.');
-      }
-    } else {
-      print(
-          'Failed to fetch initial route. Status code: ${response.statusCode}');
-    }
-  }
-
-  void _findNearestRouteAndDisplay(
-      LatLng endLocation, List<dynamic> routeData) {
-    double minDistance = double.infinity;
-    Map<String, dynamic>? nearestRoute;
-
-    for (var data in routeData) {
-      LatLng routeStartLocation =
-          LatLng(data['start_location']['lat'], data['start_location']['lng']);
-      double distance = _calculateDistance(_startLocation, routeStartLocation);
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestRoute = data;
-      }
-    }
-
-    if (nearestRoute != null) {
-      final steps = nearestRoute['steps'];
-      final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
-
-      setState(() {
-        _steps = List<Map<String, dynamic>>.from(steps);
-        _polylines.clear(); // Clear all existing polylines
-        _addPolyline(polylineCoordinates);
-      });
-
-      print('Displaying route to the nearest point.');
-    } else {
-      print('No suitable route found.');
-    }
-  }
-
   void _onMarkerTap(LatLng endLocation, String destination) {
+    final routeController = RouteController(
+      context: context,
+      onRouteFetched: (polylineCoordinates, steps) {
+        setState(() {
+          _steps = List<Map<String, dynamic>>.from(steps);
+          _polylines.clear();
+          _addPolyline(polylineCoordinates);
+        });
+      },
+    );
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -503,7 +431,8 @@ class MapSampleState extends State<MapSample> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _fetchAndCalculateRoutes(endLocation, destination);
+                routeController.fetchAndCalculateRoutes(
+                    endLocation, destination);
               },
               child: Text('Yes'),
             ),
@@ -539,32 +468,6 @@ class MapSampleState extends State<MapSample> {
   bool _isCompleted = false;
   Marker? _currentLocationMarker;
   late StreamSubscription<LocationData> _locationSubscription;
-
-  List<LatLng> _extractCoordinates(List<dynamic> steps) {
-    List<LatLng> polylineCoordinates = [];
-    for (var step in steps) {
-      LatLng startLocation =
-          LatLng(step['start_location']['lat'], step['start_location']['lng']);
-      LatLng endLocation =
-          LatLng(step['end_location']['lat'], step['end_location']['lng']);
-
-      polylineCoordinates.add(startLocation);
-      polylineCoordinates.add(endLocation);
-    }
-    return polylineCoordinates;
-  }
-
-  double _calculateDistance(LatLng start, LatLng end) {
-    var p = 0.017453292519943295;
-    var c = cos;
-    var a = 0.5 -
-        c((end.latitude - start.latitude) * p) / 2 +
-        c(start.latitude * p) *
-            c(end.latitude * p) *
-            (1 - c((end.longitude - start.longitude) * p)) /
-            2;
-    return 12742 * asin(sqrt(a));
-  }
 
   void _redrawPolyline(List<LatLng> newPoints) {
     if (_polylines.isNotEmpty) {
@@ -623,8 +526,8 @@ class MapSampleState extends State<MapSample> {
 
   void _updateRoute(double currentLatitude, double currentLongitude) {
     LatLng currentLocation = LatLng(currentLatitude, currentLongitude);
+    Calculatecontroller calculatecontroller = Calculatecontroller();
 
-    // Create a new list of remaining steps
     List<Map<String, dynamic>> remainingSteps = [];
     bool exitedBounds = false;
 
@@ -634,22 +537,20 @@ class MapSampleState extends State<MapSample> {
       LatLng endLocation =
           LatLng(step['end_location']['lat'], step['end_location']['lng']);
       double distanceToStart =
-          _calculateDistance(currentLocation, startLocation);
-      double distanceToEnd = _calculateDistance(currentLocation, endLocation);
+          calculatecontroller.calculateDistance(currentLocation, startLocation);
+      double distanceToEnd =
+          calculatecontroller.calculateDistance(currentLocation, endLocation);
 
-      // Debug output to check the calculated distances
       print('Distance to step start location: $distanceToStart');
       print('Distance to step end location: $distanceToEnd');
 
-      // Check if currentLocation is outside the polyline bounds
       if (distanceToEnd > 0.015) {
         exitedBounds = true;
       }
 
       if (distanceToStart <= 0.015 && distanceToEnd > 0.0) {
-        // Gradually reduce the last polyline step
-        double fraction =
-            distanceToStart / _calculateDistance(startLocation, endLocation);
+        double fraction = distanceToStart /
+            calculatecontroller.calculateDistance(startLocation, endLocation);
         double newLat = startLocation.latitude +
             fraction * (endLocation.latitude - startLocation.latitude);
         double newLng = startLocation.longitude +
@@ -660,58 +561,21 @@ class MapSampleState extends State<MapSample> {
           endLocation,
         ]);
 
-        // Debug output to confirm polyline update
         print('Updated polyline with remaining steps');
-
-        // Exit the loop after updating the polyline
         return;
       }
 
-      // Add the step to remainingSteps if needed
       if (distanceToEnd > 0.0) {
         remainingSteps.add(step);
       }
     }
 
-    // If no steps matched the condition, clear all polylines
     if (remainingSteps.isEmpty) {
       _polylines.clear();
       _isCompleted = true;
 
-      // Debug output to confirm route completion
       print('Route completed');
     }
-  }
-
-  Future<double> calculateTravelDuration(
-      List<LatLng> polylineCoordinates, LatLng destinationLatLng) async {
-    double totalDistance = 0.0;
-    double walkingSpeed = 5.0; // อัตราเร็วในการเดิน (กม./ชม.)
-
-    // คำนวณระยะทางรวมของเส้นทาง
-    for (int i = 0; i < polylineCoordinates.length - 1; i++) {
-      double distance = await Geolocator.distanceBetween(
-        polylineCoordinates[i].latitude,
-        polylineCoordinates[i].longitude,
-        polylineCoordinates[i + 1].latitude,
-        polylineCoordinates[i + 1].longitude,
-      );
-      totalDistance += distance;
-    }
-
-    // คำนวณระยะทางจากจุดสุดท้ายของเส้นทางไปยังจุดหมายปลายทาง
-    double distanceToDestination = await Geolocator.distanceBetween(
-      polylineCoordinates.last.latitude,
-      polylineCoordinates.last.longitude,
-      destinationLatLng.latitude,
-      destinationLatLng.longitude,
-    );
-    totalDistance += distanceToDestination;
-
-    // คำนวณระยะเวลาในการเดินทาง (นาที)
-    double travelDuration = (totalDistance / 1000.0) / (walkingSpeed / 60.0);
-
-    return travelDuration;
   }
 
   double _travelDuration = 0.0;
@@ -825,33 +689,6 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-  void _addMarkerAndShowDirections(LatLng latLng, String markerId, detail,
-      {bool showDialogOnMarkerTap = true}) {
-    _controller.future.then((controller) {
-      if (_currentPosition != null) {
-        controller.animateCamera(
-          CameraUpdate.newLatLngZoom(latLng, 16),
-        );
-      }
-    });
-
-    Marker marker = Marker(
-      markerId: MarkerId(markerId),
-      position: latLng,
-      infoWindow: InfoWindow(title: markerId),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      onTap: () {
-        if (showDialogOnMarkerTap) {
-          showDialogForDirections(markerId, latLng, detail);
-        }
-      },
-    );
-
-    setState(() {
-      _markers.add(marker);
-    });
-  }
-
   void showDialogForDirections(
       String destinationName, LatLng destinationLatLng, detail) {
     showDialog(
@@ -895,7 +732,6 @@ class MapSampleState extends State<MapSample> {
           actions: [
             TextButton(
               onPressed: () {
-                // Close the dialog
                 Navigator.of(context).pop();
                 _showCategoryDirection(destinationLatLng);
               },
@@ -911,6 +747,34 @@ class MapSampleState extends State<MapSample> {
         );
       },
     );
+  }
+
+  Future<double> calculateTravelDuration(
+      List<LatLng> polylineCoordinates, LatLng destinationLatLng) async {
+    double totalDistance = 0.0;
+    double walkingSpeed = 5.0;
+
+    for (int i = 0; i < polylineCoordinates.length - 1; i++) {
+      double distance = await Geolocator.distanceBetween(
+        polylineCoordinates[i].latitude,
+        polylineCoordinates[i].longitude,
+        polylineCoordinates[i + 1].latitude,
+        polylineCoordinates[i + 1].longitude,
+      );
+      totalDistance += distance;
+    }
+
+    double distanceToDestination = await Geolocator.distanceBetween(
+      polylineCoordinates.last.latitude,
+      polylineCoordinates.last.longitude,
+      destinationLatLng.latitude,
+      destinationLatLng.longitude,
+    );
+    totalDistance += distanceToDestination;
+
+    double travelDuration = (totalDistance / 1000.0) / (walkingSpeed / 60.0);
+
+    return travelDuration;
   }
 
   Future<void> _showCategoryDirection(LatLng destinationLatLng) async {
@@ -958,7 +822,6 @@ class MapSampleState extends State<MapSample> {
       });
       _panelController.open();
 
-      // Check if last point of polyline is near destination
       LatLng lastPoint = polylineCoordinates.last;
       double distanceToDestination = Geolocator.distanceBetween(
         lastPoint.latitude,
@@ -969,12 +832,11 @@ class MapSampleState extends State<MapSample> {
 
       if (distanceToDestination < 10) {}
     } else {
-      // ไม่แสดง SlidingUpPanel หากไม่มีการแสดงเส้นทาง
       _panelController.close();
     }
   }
 
-  void _showMenu() async {
+  void _showMenu() {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -988,29 +850,14 @@ class MapSampleState extends State<MapSample> {
                   width: 24,
                   height: 24,
                 ),
-                title: Text(
-                  'ห้องน้ำ',
-                  style: TextStyle(
-                    decoration: TextDecoration.underline,
-                    decorationColor: Colors.blue,
-                  ),
-                ),
+                title: Text('ห้องน้ำ'),
                 onTap: () {
                   setState(() {
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ห้องน้ำ1'),
-                        position:
-                            LatLng(14.035978558473701, 100.72472173847785),
-                        infoWindow: InfoWindow(title: 'ห้องน้ำ 1'),
-                        icon: _toilet,
-                        onTap: () {
-                          _categoryLocation(
-                            'ห้องน้ำ 1',
-                            LatLng(14.035978558473701, 100.72472173847785),
-                          );
-                        },
-                      ),
+                    _markerController.addToiletMarkers(
+                      (LatLng position) {
+                        _categoryLocation('ห้องน้ำ 1', position);
+                      },
+                      BitmapDescriptor.defaultMarker,
                     );
                   });
                   Navigator.pop(context);
@@ -1018,165 +865,12 @@ class MapSampleState extends State<MapSample> {
               ),
               ListTile(
                 leading: Icon(Icons.food_bank),
-                title: Text(
-                  'จุดขายอาหารและเครื่องดื่ม',
-                  style: TextStyle(
-                    decoration: TextDecoration.underline,
-                    decorationColor: Color.fromARGB(255, 37, 247, 138),
-                  ),
-                ),
+                title: Text('จุดขายอาหารและเครื่องดื่ม'),
                 onTap: () {
                   setState(() {
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ตู้เต่าบิน1'),
-                        position: LatLng(14.0341588, 100.7298778),
-                        infoWindow: InfoWindow(title: 'ตู้เต่าบิน1'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'ตู้เต่าบิน1',
-                            LatLng(14.0341588, 100.7298778),
-                          );
-                        },
-                      ),
-                    );
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ตู้เต่าบิน2'),
-                        position: LatLng(14.0355962, 100.7247165),
-                        infoWindow: InfoWindow(title: 'ตู้เต่าบิน2'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'ตู้เต่าบิน2',
-                            LatLng(14.0355962, 100.7247165),
-                          );
-                        },
-                      ),
-                    );
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ตู้เต่าบิน3'),
-                        position: LatLng(14.0364159, 100.7298667),
-                        infoWindow: InfoWindow(title: 'ตู้เต่าบิน3'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'ตู้เต่าบิน3',
-                            LatLng(14.0364159, 100.7298667),
-                          );
-                        },
-                      ),
-                    );
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ตู้เต่าบิน4'),
-                        position: LatLng(14.0362949, 100.7260241),
-                        infoWindow: InfoWindow(title: 'ตู้เต่าบิน4'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'ตู้เต่าบิน4',
-                            LatLng(14.0362949, 100.7260241),
-                          );
-                        },
-                      ),
-                    );
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ศูนย์อาหารช่อพวงชมพู'),
-                        position:
-                            LatLng(14.039641633441367, 100.72955146567259),
-                        infoWindow: InfoWindow(title: 'ศูนย์อาหารช่อพวงชมพู'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'ศูนย์อาหารช่อพวงชมพู',
-                            LatLng(14.039641633441367, 100.72955146567259),
-                          );
-                        },
-                      ),
-                    );
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('โรงอาหารหอใน'),
-                        position: LatLng(14.03236454776452, 100.7224935789183),
-                        infoWindow: InfoWindow(title: 'โรงอาหารหอใน'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'โรงอาหารหอใน',
-                            LatLng(14.03236454776452, 100.7224935789183),
-                          );
-                        },
-                      ),
-                    );
-                  });
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.directions_car),
-                title: Text('ลานจอดรถ'),
-                onTap: () async {
-                  setState(() {
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ลานจอดรถ1'),
-                        position: LatLng(14.03328625545491, 100.72943063441335),
-                        infoWindow: InfoWindow(title: 'ลานจอดรถ1'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueOrange,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'ลานจอดรถ1',
-                            LatLng(14.03328625545491, 100.72943063441335),
-                          );
-                        },
-                      ),
-                    );
-                    // เพิ่ม Marker อื่น ๆ ที่ต้องการที่นี่
-                  });
-
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.atm),
-                title: Text('ตู้ ATM'),
-                onTap: () async {
-                  setState(() {
-                    _markers.add(
-                      Marker(
-                        markerId: MarkerId('ตู้ATMธนาคารกรุงไทย'),
-                        position: LatLng(14.0355962, 100.7247165),
-                        infoWindow: InfoWindow(title: 'ตู้ATMธนาคารกรุงไทย'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueGreen,
-                        ),
-                        onTap: () {
-                          _categoryLocation(
-                            'ตู้ATMธนาคารกรุงไทย',
-                            LatLng(14.0355962, 100.7247165),
-                          );
-                        },
-                      ),
-                    );
-                    // เพิ่ม Marker อื่น ๆ ที่ต้องการที่นี่
+                    _markerController.addFoodMarkers((LatLng position) {
+                      _categoryLocation('Food Location', position);
+                    });
                   });
                   Navigator.pop(context);
                 },
@@ -1185,6 +879,6 @@ class MapSampleState extends State<MapSample> {
           ),
         );
       },
-    ).then((value) {});
+    );
   }
 }

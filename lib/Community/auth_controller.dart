@@ -24,7 +24,6 @@ class AuthController {
       UserCredential userCredential =
           await _auth.signInWithCredential(credential);
 
-      // Check if the username already exists
       QuerySnapshot usernameSnapshot = await FirebaseFirestore.instance
           .collection('usersRMUTT')
           .where('username', isEqualTo: username)
