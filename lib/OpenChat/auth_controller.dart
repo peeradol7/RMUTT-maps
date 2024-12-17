@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:maps/Community/ChatScreen.dart';
+import 'package:maps/OpenChat/ChatScreen.dart';
 
 class AuthController {
   final FirebaseAuth _auth = FirebaseAuth.instance;

@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import 'ChatScreen.dart'; // หน้าที่จะนำผู้ใช้ไปเมื่อเข้าสู่ระบบสำเร็จ
+import 'ChatScreen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -17,7 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
     String password = _passwordController.text.trim();
 
     try {
-
       QuerySnapshot querySnapshot = await FirebaseFirestore.instance
           .collection('usersRMUTT')
           .where('username', isEqualTo: username)
@@ -39,11 +38,9 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           );
         } else {
-          // แสดงข้อความหาก password ไม่ถูกต้อง
           _showErrorDialog('Incorrect password. Please try again.');
         }
       } else {
-        // แสดงข้อความหาก username ไม่ถูกต้อง
         _showErrorDialog('Username not found. Please try again.');
       }
     } catch (e) {

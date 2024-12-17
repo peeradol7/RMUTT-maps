@@ -71,7 +71,6 @@ android {
             shrinkResources false
             minifyEnabled true //ก่อนหน้า falseกก
             
-            useProguard true//ลบได้เ
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'//ลบได้
         }
     }

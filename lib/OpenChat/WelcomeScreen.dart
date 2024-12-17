@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:maps/Community/Login.dart';
-import 'package:maps/Community/register.dart';
+import 'package:maps/OpenChat/Login.dart';
+import 'package:maps/OpenChat/Register.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});

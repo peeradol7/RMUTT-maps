@@ -18,7 +18,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMessage() async {
     String message = _messageController.text.trim();
     if (message.isNotEmpty) {
-      // Add message to Firestore
       await _firestore.collection('chat').add({
         'message': message,
         'senderName': widget.name,
