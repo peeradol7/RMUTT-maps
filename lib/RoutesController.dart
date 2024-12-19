@@ -14,42 +14,60 @@ class RouteController {
   Future<void> fetchAndCalculateRoutes(
       LatLng endLocation, String destination) async {
     final String url =
-        'https://355c12d0-f697-4646-9c07-0715c29de092-00-b95cq7qvlj7.pike.replit.dev/Route';
-    final response = await http.get(Uri.parse(url));
+        'https://355c12d0-f697-4646-9c07-0715c29de092-00-b95cq7qjvlj7.pike.replit.dev/get-route';
 
-    if (response.statusCode == 200) {
-      final json = jsonDecode(response.body);
-      if (json['status'] == 'OK' &&
-          json['routes'] != null &&
-          json['routes'].isNotEmpty) {
-        final route = json['routes'][0];
-        print("Received route data: ${route['data']}");
+    // เตรียมข้อมูลสำหรับการ POST
+    final Map<String, dynamic> requestBody = {
+      'selectedLat': endLocation.latitude.toString(),
+      'selectedLng': endLocation.longitude.toString(),
+      'destination': destination, // หาก API รองรับการค้นหาด้วยชื่อ
+    };
 
-        final matchingData = route['data'].firstWhere(
-          (data) =>
-              data['end_address'] != null &&
-              data['end_address']
-                  .toString()
-                  .toLowerCase()
-                  .contains(destination.toLowerCase()),
-          orElse: () => null,
-        );
+    try {
+      // ส่งคำขอแบบ POST
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(requestBody),
+      );
 
-        if (matchingData != null) {
-          final steps = matchingData['steps'];
-          final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['message'] == 'Route found' &&
+            json['route'] != null &&
+            json['route']['data'] != null) {
+          final route = json['route'];
+          print("Received route data: ${route['data']}");
 
-          onRouteFetched(polylineCoordinates, steps);
+          // ค้นหาข้อมูลที่ตรงกับปลายทาง
+          final matchingData = route['data'].firstWhere(
+            (data) =>
+                data['end_address'] != null &&
+                data['end_address']
+                    .toString()
+                    .toLowerCase()
+                    .contains(destination.toLowerCase()),
+            orElse: () => null,
+          );
+
+          if (matchingData != null) {
+            final steps = matchingData['steps'];
+            final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
+
+            onRouteFetched(polylineCoordinates, steps);
+          } else {
+            print('No matching data found for destination: $destination');
+            _findNearestRouteAndDisplay(endLocation, route['data']);
+          }
         } else {
-          print('No matching data found for destination: $destination');
-          _findNearestRouteAndDisplay(endLocation, route['data']);
+          print('No routes found in the response or route data is invalid.');
         }
       } else {
-        print('No routes found in the response or status is not OK.');
+        print(
+            'Failed to fetch route. Status code: ${response.statusCode}, message: ${response.body}');
       }
-    } else {
-      print(
-          'Failed to fetch initial route. Status code: ${response.statusCode}');
+    } catch (e) {
+      print('Error occurred while fetching route: $e');
     }
   }
 
@@ -95,7 +113,7 @@ class RouteController {
   }
 
   double _calculateDistance(LatLng point1, LatLng point2) {
-    const double earthRadius = 6371; // Earth's radius in kilometers
+    const double earthRadius = 6371;
     final double dLat = _degreesToRadians(point2.latitude - point1.latitude);
     final double dLng = _degreesToRadians(point2.longitude - point1.longitude);
 

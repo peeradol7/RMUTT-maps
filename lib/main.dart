@@ -214,7 +214,7 @@ class MapSampleState extends State<MapSample> {
           GoogleMap(
             mapType: MapType.normal,
 
-            markers: Set.from(_markers)
+            markers: Set<Marker>.from(_markerController.markers)
               ..addAll([
                 if (_currentPosition != null)
                   Marker(
