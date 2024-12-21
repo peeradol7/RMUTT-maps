@@ -11,7 +11,8 @@ class RouteController {
 
   Future<void> fetchAndCalculateRoutes(
       LatLng currentLocation, LatLng endLocation, String destination) async {
-    final String url = 'https://your-api-endpoint/get-route';
+    final String url =
+        'https://355c12d0-f697-4646-9c07-0715c29de092-00-b95cq7qjvlj7.pike.replit.dev/get-route';
 
     // เตรียมข้อมูลสำหรับการ POST
     final Map<String, dynamic> requestBody = {
