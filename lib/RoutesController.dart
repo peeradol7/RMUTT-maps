@@ -1,30 +1,28 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
 class RouteController {
-  final BuildContext context;
   final Function(List<LatLng>, List<Map<String, dynamic>>) onRouteFetched;
 
-  RouteController({required this.context, required this.onRouteFetched});
+  RouteController({required this.onRouteFetched});
 
   Future<void> fetchAndCalculateRoutes(
-      LatLng endLocation, String destination) async {
-    final String url =
-        'https://355c12d0-f697-4646-9c07-0715c29de092-00-b95cq7qjvlj7.pike.replit.dev/get-route';
+      LatLng currentLocation, LatLng endLocation, String destination) async {
+    final String url = 'https://your-api-endpoint/get-route';
 
     // เตรียมข้อมูลสำหรับการ POST
     final Map<String, dynamic> requestBody = {
+      'currentLat': currentLocation.latitude.toString(),
+      'currentLng': currentLocation.longitude.toString(),
       'selectedLat': endLocation.latitude.toString(),
       'selectedLng': endLocation.longitude.toString(),
-      'destination': destination, // หาก API รองรับการค้นหาด้วยชื่อ
+      'destination': destination,
     };
 
     try {
-      // ส่งคำขอแบบ POST
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -33,69 +31,43 @@ class RouteController {
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        if (json['message'] == 'Route found' &&
-            json['route'] != null &&
-            json['route']['data'] != null) {
-          final route = json['route'];
-          print("Received route data: ${route['data']}");
+        if (json['message'] == 'Route found' && json['route'] != null) {
+          final routeData = json['route']['data'];
+          final nearestRoute = _findNearestRoute(routeData, currentLocation);
 
-          // ค้นหาข้อมูลที่ตรงกับปลายทาง
-          final matchingData = route['data'].firstWhere(
-            (data) =>
-                data['end_address'] != null &&
-                data['end_address']
-                    .toString()
-                    .toLowerCase()
-                    .contains(destination.toLowerCase()),
-            orElse: () => null,
-          );
-
-          if (matchingData != null) {
-            final steps = matchingData['steps'];
+          if (nearestRoute != null) {
+            final steps = nearestRoute['steps'];
             final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
 
             onRouteFetched(polylineCoordinates, steps);
           } else {
-            print('No matching data found for destination: $destination');
-            _findNearestRouteAndDisplay(endLocation, route['data']);
+            print('No suitable route found.');
           }
-        } else {
-          print('No routes found in the response or route data is invalid.');
         }
       } else {
-        print(
-            'Failed to fetch route. Status code: ${response.statusCode}, message: ${response.body}');
+        print('Failed to fetch route: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error occurred while fetching route: $e');
+      print('Error fetching route: $e');
     }
   }
 
-  void _findNearestRouteAndDisplay(
-      LatLng endLocation, List<dynamic> routeData) {
+  Map<String, dynamic>? _findNearestRoute(
+      List<dynamic> routeData, LatLng currentLocation) {
     double minDistance = double.infinity;
     Map<String, dynamic>? nearestRoute;
 
     for (var data in routeData) {
       LatLng routeStartLocation =
           LatLng(data['start_location']['lat'], data['start_location']['lng']);
-      double distance = _calculateDistance(endLocation, routeStartLocation);
+      double distance = _calculateDistance(currentLocation, routeStartLocation);
 
       if (distance < minDistance) {
         minDistance = distance;
         nearestRoute = data;
       }
     }
-
-    if (nearestRoute != null) {
-      final steps = nearestRoute['steps'];
-      final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
-
-      onRouteFetched(polylineCoordinates, steps);
-      print('Displaying route to the nearest point.');
-    } else {
-      print('No suitable route found.');
-    }
+    return nearestRoute;
   }
 
   List<LatLng> _extractCoordinates(List<dynamic> steps) {

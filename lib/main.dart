@@ -9,7 +9,6 @@ import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
-import 'package:maps/CalculateController.dart';
 import 'package:maps/MarkerController.dart';
 import 'package:maps/OpenChat/WelcomeScreen.dart';
 import 'package:maps/RoutesController.dart';
@@ -77,6 +76,9 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
   final MarkerController _markerController = MarkerController();
+  List<LatLng> _routeCoordinates = [];
+  LatLng? _destinationLatLng;
+  String _destination = '';
   @override
   void initState() {
     super.initState();
@@ -130,6 +132,7 @@ class MapSampleState extends State<MapSample> {
           markerId: MarkerId('user_marker'),
           position: _currentPosition!,
           icon: BitmapDescriptor.defaultMarker,
+          infoWindow: InfoWindow(title: 'Your Location'),
         );
       });
     }
@@ -213,7 +216,6 @@ class MapSampleState extends State<MapSample> {
         children: [
           GoogleMap(
             mapType: MapType.normal,
-
             markers: Set<Marker>.from(_markerController.markers)
               ..addAll([
                 if (_currentPosition != null)
@@ -227,9 +229,8 @@ class MapSampleState extends State<MapSample> {
             initialCameraPosition: university,
             polylines: _polylines,
             trafficEnabled: true,
-            mapToolbarEnabled: false, // ซ่อนปุ่มทั้งหมด
+            mapToolbarEnabled: false,
             zoomControlsEnabled: false,
-
             onMapCreated: (GoogleMapController controller) {
               _controller.complete(controller);
             },
@@ -335,8 +336,11 @@ class MapSampleState extends State<MapSample> {
                               LatLng destinationLatLng =
                                   LatLng(latitude, longitude);
 
-                              // Add marker to map
+                              // Update the class variables
                               setState(() {
+                                _destinationLatLng = destinationLatLng;
+                                _destination = selectedLocation;
+
                                 _markers.add(
                                   Marker(
                                     markerId: MarkerId('destination_$index'),
@@ -356,6 +360,20 @@ class MapSampleState extends State<MapSample> {
                                   selectedLocation, setState, _searchText);
                               _searchController.clear();
                               _searchText = '';
+
+                              // Call the route fetching function with all required parameters
+                              Location().getLocation().then((locationData) {
+                                if (locationData != null) {
+                                  LatLng currentPosition = LatLng(
+                                      locationData.latitude!,
+                                      locationData.longitude!);
+                                  _fetchRouteFromApi(
+                                      currentPosition,
+                                      destinationLatLng,
+                                      selectedLocation // Add the destination name
+                                      );
+                                }
+                              });
                             },
                             child: Container(
                               decoration: BoxDecoration(
@@ -385,33 +403,8 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  void _updateCurrentLocationMarker(LocationData currentLocation) {
-    if (_controller != null) {
-      setState(() {
-        _currentLocationMarker = Marker(
-          markerId: const MarkerId('currentLocation'),
-          position:
-              LatLng(currentLocation.latitude!, currentLocation.longitude!),
-          infoWindow: const InfoWindow(title: 'Current Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        );
-        _markers.removeWhere(
-            (marker) => marker.markerId.value == 'currentLocation');
-        _markers.add(_currentLocationMarker!);
-      });
-
-      _controllers?.animateCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: LatLng(currentLocation.latitude!, currentLocation.longitude!),
-          zoom: 17.5,
-        ),
-      ));
-    }
-  }
-
   void _onMarkerTap(LatLng endLocation, String destination) {
     final routeController = RouteController(
-      context: context,
       onRouteFetched: (polylineCoordinates, steps) {
         setState(() {
           _steps = List<Map<String, dynamic>>.from(steps);
@@ -432,7 +425,10 @@ class MapSampleState extends State<MapSample> {
               onPressed: () {
                 Navigator.of(context).pop();
                 routeController.fetchAndCalculateRoutes(
-                    endLocation, destination);
+                  _currentPosition!,
+                  endLocation,
+                  destination, // Add the destination parameter
+                );
               },
               child: Text('Yes'),
             ),
@@ -459,124 +455,22 @@ class MapSampleState extends State<MapSample> {
         points: polylineCoordinates,
       ));
     });
+    setState(() {
+      _routeCoordinates.addAll(polylineCoordinates); // แก้ไขที่นี่
+      _polylines.add(Polyline(
+        polylineId: PolylineId('route'),
+        points: _routeCoordinates,
+        color: Colors.blue,
+        width: 5,
+      ));
+    });
   }
 
   Set<Polyline> _polylines = {};
   List<Marker> _markers = [];
-  Location _location = Location();
   List<Map<String, dynamic>> _steps = [];
-  bool _isCompleted = false;
   Marker? _currentLocationMarker;
   late StreamSubscription<LocationData> _locationSubscription;
-
-  void _redrawPolyline(List<LatLng> newPoints) {
-    if (_polylines.isNotEmpty) {
-      Polyline matchingPolyline = _polylines.first;
-      _polylines.clear();
-      _polylines.add(Polyline(
-        polylineId: matchingPolyline.polylineId,
-        width: matchingPolyline.width,
-        color: matchingPolyline.color,
-        points: newPoints,
-      ));
-    }
-  }
-
-  void showCurrentLocation() async {
-    Location location = Location();
-
-    bool _serviceEnabled;
-    PermissionStatus _permissionGranted;
-    LocationData _locationData;
-
-    _serviceEnabled = await location.serviceEnabled();
-
-    if (!_serviceEnabled) {
-      _serviceEnabled = await location.requestService();
-      if (!_serviceEnabled) {
-        return;
-      }
-    }
-
-    _permissionGranted = await location.hasPermission();
-    if (_permissionGranted == PermissionStatus.denied) {
-      _permissionGranted = await location.requestPermission();
-      if (_permissionGranted != PermissionStatus.granted) {
-        return;
-      }
-    }
-
-    _locationData = await location.getLocation();
-
-    final currentLocation =
-        LatLng(_locationData.latitude ?? 0.0, _locationData.longitude ?? 0.0);
-
-    _updateCurrentLocationMarker(_locationData);
-
-    _controllers?.animateCamera(CameraUpdate.newLatLng(currentLocation));
-    location.onLocationChanged.listen((LocationData currentLocation) {
-      print(currentLocation);
-      final _currentLocation = LatLng(
-          currentLocation.latitude ?? 0.0, currentLocation.longitude ?? 0.0);
-      _updateCurrentLocationMarker(currentLocation);
-      _updateRoute(currentLocation.latitude!, currentLocation.longitude!);
-      _controllers?.animateCamera(CameraUpdate.newLatLng(_currentLocation));
-    });
-  }
-
-  void _updateRoute(double currentLatitude, double currentLongitude) {
-    LatLng currentLocation = LatLng(currentLatitude, currentLongitude);
-    Calculatecontroller calculatecontroller = Calculatecontroller();
-
-    List<Map<String, dynamic>> remainingSteps = [];
-    bool exitedBounds = false;
-
-    for (var step in _steps) {
-      LatLng startLocation =
-          LatLng(step['start_location']['lat'], step['start_location']['lng']);
-      LatLng endLocation =
-          LatLng(step['end_location']['lat'], step['end_location']['lng']);
-      double distanceToStart =
-          calculatecontroller.calculateDistance(currentLocation, startLocation);
-      double distanceToEnd =
-          calculatecontroller.calculateDistance(currentLocation, endLocation);
-
-      print('Distance to step start location: $distanceToStart');
-      print('Distance to step end location: $distanceToEnd');
-
-      if (distanceToEnd > 0.015) {
-        exitedBounds = true;
-      }
-
-      if (distanceToStart <= 0.015 && distanceToEnd > 0.0) {
-        double fraction = distanceToStart /
-            calculatecontroller.calculateDistance(startLocation, endLocation);
-        double newLat = startLocation.latitude +
-            fraction * (endLocation.latitude - startLocation.latitude);
-        double newLng = startLocation.longitude +
-            fraction * (endLocation.longitude - startLocation.longitude);
-
-        _redrawPolyline([
-          LatLng(newLat, newLng),
-          endLocation,
-        ]);
-
-        print('Updated polyline with remaining steps');
-        return;
-      }
-
-      if (distanceToEnd > 0.0) {
-        remainingSteps.add(step);
-      }
-    }
-
-    if (remainingSteps.isEmpty) {
-      _polylines.clear();
-      _isCompleted = true;
-
-      print('Route completed');
-    }
-  }
 
   double _travelDuration = 0.0;
 
@@ -663,30 +557,62 @@ class MapSampleState extends State<MapSample> {
 
   bool _cameraMoved = false;
   LatLng? _currentPosition;
+
   Future<void> showUserLocation() async {
     LocationData? currentLocationData = await Location().getLocation();
     if (currentLocationData != null) {
-      _currentPosition =
-          LatLng(currentLocationData.latitude!, currentLocationData.longitude!);
-      _updateUserMarker();
-      GoogleMapController controller = await _controller.future;
+      setState(() {
+        _currentPosition = LatLng(
+          currentLocationData.latitude!,
+          currentLocationData.longitude!,
+        );
+      });
+
+      GoogleMapController controller =
+          await _controller.future; // Added .future
       controller
           .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 16));
 
-      // Start location service to get continuous location updates
       Location().onLocationChanged.listen((LocationData locationData) {
-        _currentPosition =
-            LatLng(locationData.latitude!, locationData.longitude!);
-        _updateUserMarker();
+        setState(() {
+          _currentPosition =
+              LatLng(locationData.latitude!, locationData.longitude!);
+        });
+
         if (!_cameraMoved) {
-          // ตรวจสอบว่ามุมกล้องได้ถูกขยับหรือไม่
           controller.animateCamera(CameraUpdate.newLatLng(_currentPosition!));
-          _cameraMoved = true; // กำหนดให้มุมกล้องได้ถูกขยับ
+          _cameraMoved = true;
+        }
+
+        // You'll need to provide a destination for this call
+        if (_destinationLatLng != null) {
+          // Add this check
+          _fetchRouteFromApi(
+              _currentPosition!, _destinationLatLng!, _destination);
         }
       });
     } else {
       print('Error: Cannot get current location');
     }
+  }
+
+  void _fetchRouteFromApi(
+      LatLng currentPosition, LatLng destinationLatLng, String destination) {
+    final routeController = RouteController(
+      onRouteFetched: (polylineCoordinates, steps) {
+        setState(() {
+          _steps = List<Map<String, dynamic>>.from(steps);
+          _polylines.clear();
+          _addPolyline(polylineCoordinates);
+        });
+      },
+    );
+
+    routeController.fetchAndCalculateRoutes(
+      currentPosition,
+      destinationLatLng,
+      destination,
+    );
   }
 
   void showDialogForDirections(
@@ -701,7 +627,6 @@ class MapSampleState extends State<MapSample> {
           actions: [
             TextButton(
               onPressed: () {
-                // Close the dialog
                 Navigator.of(context).pop();
                 getShortestRoute(destinationLatLng, detail);
               },
