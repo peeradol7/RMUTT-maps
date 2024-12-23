@@ -10,7 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
 import 'package:maps/MarkerController.dart';
-import 'package:maps/OpenChat/WelcomeScreen.dart';
+import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/RoutesController.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';

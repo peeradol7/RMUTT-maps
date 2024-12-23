@@ -1,6 +1,6 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:maps/OpenChat/OTPVerification.dart';
+
+import 'Controller/auth_controller.dart';
 
 class RegisterScreen extends StatefulWidget {
   @override
@@ -9,67 +9,74 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _phoneController = TextEditingController();
-  FirebaseAuth auth = FirebaseAuth.instance;
-
-  Future<void> sendOTP() async {
-    String phoneNumber = _phoneController.text.trim();
-
-    // Check if the number starts with 0 and replace it with +66
-    if (phoneNumber.startsWith('0')) {
-      phoneNumber = '+66' + phoneNumber.substring(1);
-    } else if (!phoneNumber.startsWith('+66')) {
-      phoneNumber = '+66' + phoneNumber;
-    }
-
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: phoneNumber,
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        // Auto-sign-in, can be ignored in this context
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        print('Verification failed: ${e.message}');
-        // Show error message
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        print('OTP sent: $verificationId');
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => OTPVerificationScreen(
-              verificationId: verificationId,
-              phoneNumber: phoneNumber,
-            ),
-          ),
-        );
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        print('Code auto retrieval timeout: $verificationId');
-      },
-    );
-  }
+  final AuthController _authController = AuthController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Register")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(
-              controller: _phoneController,
-              decoration: InputDecoration(
-                labelText: "Phone Number",
-                border: OutlineInputBorder(),
+      backgroundColor: Colors.grey[200],
+      appBar: AppBar(
+        title: Text("Register"),
+        foregroundColor: Colors.white,
+        backgroundColor: const Color.fromARGB(255, 4, 42, 73),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Image.asset(
+                    'assets/registerImage.png',
+                    height: 150,
+                    width: 150,
+                  ),
+                  SizedBox(height: 30),
+                  TextField(
+                    controller: _phoneController,
+                    decoration: InputDecoration(
+                      labelText: "Phone Number",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      prefixIcon: Icon(Icons.phone, color: Colors.teal),
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      _authController.sendOTP(
+                        phoneNumber: _phoneController.text.trim(),
+                        context: context,
+                      );
+                    },
+                    child: Text(
+                      "Send OTP",
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(255, 4, 42, 73),
+                      foregroundColor: Colors.white,
+                      minimumSize: Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              keyboardType: TextInputType.phone,
             ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: sendOTP,
-              child: Text("Send OTP"),
-            ),
-          ],
+          ),
         ),
       ),
     );

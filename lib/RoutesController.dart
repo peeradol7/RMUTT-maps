@@ -14,7 +14,6 @@ class RouteController {
     final String url =
         'https://355c12d0-f697-4646-9c07-0715c29de092-00-b95cq7qjvlj7.pike.replit.dev/get-route';
 
-    // เตรียมข้อมูลสำหรับการ POST
     final Map<String, dynamic> requestBody = {
       'currentLat': currentLocation.latitude.toString(),
       'currentLng': currentLocation.longitude.toString(),
@@ -34,15 +33,12 @@ class RouteController {
         final json = jsonDecode(response.body);
         if (json['message'] == 'Route found' && json['route'] != null) {
           final routeData = json['route']['data'];
-          final nearestRoute = _findNearestRoute(routeData, currentLocation);
 
+          final nearestRoute = _findNearestRoute(routeData, currentLocation);
           if (nearestRoute != null) {
             final steps = nearestRoute['steps'];
             final List<LatLng> polylineCoordinates = _extractCoordinates(steps);
-
             onRouteFetched(polylineCoordinates, steps);
-          } else {
-            print('No suitable route found.');
           }
         }
       } else {
