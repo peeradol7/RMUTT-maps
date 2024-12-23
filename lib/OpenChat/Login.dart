@@ -1,7 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import 'ChatScreen.dart';
+import './Controller/LoginController.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -11,93 +10,90 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final LoginController _loginController = LoginController();
 
   Future<void> _login() async {
     String username = _usernameController.text.trim();
     String password = _passwordController.text.trim();
-
-    try {
-      QuerySnapshot querySnapshot = await FirebaseFirestore.instance
-          .collection('usersRMUTT')
-          .where('username', isEqualTo: username)
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        var userDoc = querySnapshot.docs.first;
-        String storedPassword = userDoc['password'];
-        String name = userDoc['name'];
-
-        if (storedPassword == password) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(
-                username: username,
-                name: name,
-              ),
-            ),
-          );
-        } else {
-          _showErrorDialog('Incorrect password. Please try again.');
-        }
-      } else {
-        _showErrorDialog('Username not found. Please try again.');
-      }
-    } catch (e) {
-      print('Error during login: $e');
-      _showErrorDialog('An error occurred. Please try again later.');
-    }
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
+    _loginController.login(
+      username: username,
+      password: password,
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Login Failed'),
-        content: Text(message),
-        actions: <Widget>[
-          TextButton(
-            child: Text('Okay'),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
-          )
-        ],
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Login")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: InputDecoration(
-                labelText: "Username",
-                border: OutlineInputBorder(),
+      backgroundColor: Colors.grey[200],
+      appBar: AppBar(
+        title: Text("Login"),
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.teal,
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Image.asset(
+                    'assets/loginImage.png',
+                    height: 250,
+                    width: 250,
+                  ),
+                  SizedBox(height: 30),
+                  TextField(
+                    controller: _usernameController,
+                    decoration: InputDecoration(
+                      labelText: "Username",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      prefixIcon: Icon(Icons.person, color: Colors.teal),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  TextField(
+                    controller: _passwordController,
+                    decoration: InputDecoration(
+                      labelText: "Password",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      prefixIcon: Icon(Icons.lock, color: Colors.teal),
+                    ),
+                    obscureText: true,
+                  ),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _login,
+                    child: Text("Login",
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      minimumSize: Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: 20),
-            TextField(
-              controller: _passwordController,
-              decoration: InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true, // ซ่อนรหัสผ่าน
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _login,
-              child: Text("Login"),
-            ),
-          ],
+          ),
         ),
       ),
     );

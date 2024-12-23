@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'auth_controller.dart';
+import 'Controller/auth_controller.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
   final String verificationId;
@@ -26,6 +26,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
   final AuthController _authController = AuthController();
 
   bool isValidUsername(String username) {
+    // Username must contain only English letters and numbers, and be at least 6 characters long
     return RegExp(r'^[a-zA-Z0-9]{6,}$').hasMatch(username);
   }
 
@@ -36,7 +37,11 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Verify OTP")),
+      appBar: AppBar(
+        title: Text("Verify OTP"),
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.teal,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -45,11 +50,12 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
             TextField(
               controller: _otpController,
               decoration: InputDecoration(
-                labelText: "Enter OTP",
+                labelText: "ใส่รหัส OTP",
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
             ),
+            SizedBox(height: 16), // Add space between fields
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
@@ -58,6 +64,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               ),
               keyboardType: TextInputType.text,
             ),
+            SizedBox(height: 16), // Add space between fields
             TextField(
               controller: _usernameController,
               decoration: InputDecoration(
@@ -66,6 +73,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               ),
               keyboardType: TextInputType.text,
             ),
+            SizedBox(height: 16), // Add space between fields
             TextField(
               controller: _passwordController,
               decoration: InputDecoration(
@@ -75,6 +83,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               obscureText: true,
               keyboardType: TextInputType.text,
             ),
+            SizedBox(height: 16), // Add space between fields
             TextField(
               controller: _confirmPasswordController,
               decoration: InputDecoration(
@@ -84,7 +93,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               obscureText: true,
               keyboardType: TextInputType.text,
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 20), // Add space before button
             ElevatedButton(
               onPressed: () {
                 String username = _usernameController.text.trim();
@@ -119,6 +128,14 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                 }
               },
               child: Text("Verify OTP"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+                minimumSize: Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ],
         ),
