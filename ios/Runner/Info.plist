@@ -30,6 +30,10 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+<string>This app needs access to location when open to show your current location on the map.</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>This app needs access to location when in the background to update your location on the map.</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>

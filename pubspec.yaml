@@ -32,7 +32,6 @@ dependencies:
   flutter:
     sdk: flutter
   google_maps_flutter: ^2.6.1
-  location: ^5.0.0
   cupertino_icons: ^1.0.6
   geolocator: ^11.0.0
   firebase_core: ^2.32.0
