@@ -9,7 +9,7 @@ import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:maps/MarkerController.dart';
-import 'package:maps/OpenChat/Main.dart';
+import 'package:maps/OpenChat/WelcomeScreen.dart';
 import 'package:maps/RoutesController.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
@@ -71,13 +71,13 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor userLocationIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _markerIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _toilet = BitmapDescriptor.defaultMarker;
+  Location locationController = Location();
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
   final MarkerController _markerController = MarkerController();
   List<LatLng> _routeCoordinates = [];
   LatLng? _destinationLatLng;
   String _destination = '';
-  StreamSubscription<Position>? _locationSubscription;
   @override
   void initState() {
     super.initState();
@@ -106,9 +106,8 @@ class MapSampleState extends State<MapSample> {
   }
 
   Future<void> _requestPermission() async {
-    LocationPermission permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse) {
+    PermissionStatus permissionStatus = await Location().requestPermission();
+    if (permissionStatus == PermissionStatus.granted) {
       _startLocationUpdates();
     } else {
       print('Location permission denied');
@@ -116,14 +115,12 @@ class MapSampleState extends State<MapSample> {
   }
 
   void _startLocationUpdates() {
-    _locationSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Updates every 10 meters
-      ),
-    ).listen((Position position) {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-      _updateUserMarker();
+    _locationSubscription = Location().onLocationChanged.listen((locationData) {
+      if (locationData.latitude != null && locationData.longitude != null) {
+        _currentPosition =
+            LatLng(locationData.latitude!, locationData.longitude!);
+        _updateUserMarker();
+      }
     });
   }
 
@@ -144,6 +141,7 @@ class MapSampleState extends State<MapSample> {
   void dispose() {
     _searchController.dispose();
     _locationSubscription?.cancel();
+
     super.dispose();
   }
 
@@ -362,12 +360,12 @@ class MapSampleState extends State<MapSample> {
                               _searchController.clear();
                               _searchText = '';
 
-                              // Call the route fetching function with all required parameterss
-                              Geolocator.getCurrentPosition()
-                                  .then((Position position) {
-                                if (position != null) {
+                              // Call the route fetching function with all required parameters
+                              Location().getLocation().then((locationData) {
+                                if (locationData != null) {
                                   LatLng currentPosition = LatLng(
-                                      position.latitude, position.longitude);
+                                      locationData.latitude!,
+                                      locationData.longitude!);
                                   _fetchRouteFromApi(
                                       currentPosition,
                                       destinationLatLng,
@@ -471,6 +469,7 @@ class MapSampleState extends State<MapSample> {
   List<Marker> _markers = [];
   List<Map<String, dynamic>> _steps = [];
   Marker? _currentLocationMarker;
+  late StreamSubscription<LocationData> _locationSubscription;
 
   double _travelDuration = 0.0;
 
@@ -559,30 +558,24 @@ class MapSampleState extends State<MapSample> {
   LatLng? _currentPosition;
 
   Future<void> showUserLocation() async {
-    try {
-      Position currentPosition = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
-
+    LocationData? currentLocationData = await Location().getLocation();
+    if (currentLocationData != null) {
       setState(() {
         _currentPosition = LatLng(
-          currentPosition.latitude,
-          currentPosition.longitude,
+          currentLocationData.latitude!,
+          currentLocationData.longitude!,
         );
       });
 
-      GoogleMapController controller = await _controller.future;
+      GoogleMapController controller =
+          await _controller.future; // Added .future
       controller
           .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 16));
 
-      // Set up position stream
-      StreamSubscription<Position> positionStream =
-          Geolocator.getPositionStream(
-              locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Update every 10 meters
-      )).listen((Position position) {
+      Location().onLocationChanged.listen((LocationData locationData) {
         setState(() {
-          _currentPosition = LatLng(position.latitude, position.longitude);
+          _currentPosition =
+              LatLng(locationData.latitude!, locationData.longitude!);
         });
 
         if (!_cameraMoved) {
@@ -590,13 +583,15 @@ class MapSampleState extends State<MapSample> {
           _cameraMoved = true;
         }
 
+        // You'll need to provide a destination for this call
         if (_destinationLatLng != null) {
+          // Add this check
           _fetchRouteFromApi(
               _currentPosition!, _destinationLatLng!, _destination);
         }
       });
-    } catch (e) {
-      print('Error: Cannot get current location - $e');
+    } else {
+      print('Error: Cannot get current location');
     }
   }
 
