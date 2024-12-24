@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:location/location.dart';
 import 'package:maps/MarkerController.dart';
 import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/RoutesController.dart';
@@ -72,13 +71,13 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor userLocationIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _markerIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _toilet = BitmapDescriptor.defaultMarker;
-  Location locationController = Location();
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
   final MarkerController _markerController = MarkerController();
   List<LatLng> _routeCoordinates = [];
   LatLng? _destinationLatLng;
   String _destination = '';
+  StreamSubscription<Position>? _locationSubscription;
   @override
   void initState() {
     super.initState();
@@ -107,8 +106,9 @@ class MapSampleState extends State<MapSample> {
   }
 
   Future<void> _requestPermission() async {
-    PermissionStatus permissionStatus = await Location().requestPermission();
-    if (permissionStatus == PermissionStatus.granted) {
+    LocationPermission permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
       _startLocationUpdates();
     } else {
       print('Location permission denied');
@@ -116,12 +116,14 @@ class MapSampleState extends State<MapSample> {
   }
 
   void _startLocationUpdates() {
-    _locationSubscription = Location().onLocationChanged.listen((locationData) {
-      if (locationData.latitude != null && locationData.longitude != null) {
-        _currentPosition =
-            LatLng(locationData.latitude!, locationData.longitude!);
-        _updateUserMarker();
-      }
+    _locationSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // Updates every 10 meters
+      ),
+    ).listen((Position position) {
+      _currentPosition = LatLng(position.latitude, position.longitude);
+      _updateUserMarker();
     });
   }
 
@@ -142,7 +144,6 @@ class MapSampleState extends State<MapSample> {
   void dispose() {
     _searchController.dispose();
     _locationSubscription?.cancel();
-
     super.dispose();
   }
 
@@ -362,11 +363,11 @@ class MapSampleState extends State<MapSample> {
                               _searchText = '';
 
                               // Call the route fetching function with all required parameters
-                              Location().getLocation().then((locationData) {
-                                if (locationData != null) {
+                              Geolocator.getCurrentPosition()
+                                  .then((Position position) {
+                                if (position != null) {
                                   LatLng currentPosition = LatLng(
-                                      locationData.latitude!,
-                                      locationData.longitude!);
+                                      position.latitude, position.longitude);
                                   _fetchRouteFromApi(
                                       currentPosition,
                                       destinationLatLng,
@@ -470,7 +471,6 @@ class MapSampleState extends State<MapSample> {
   List<Marker> _markers = [];
   List<Map<String, dynamic>> _steps = [];
   Marker? _currentLocationMarker;
-  late StreamSubscription<LocationData> _locationSubscription;
 
   double _travelDuration = 0.0;
 
@@ -559,24 +559,30 @@ class MapSampleState extends State<MapSample> {
   LatLng? _currentPosition;
 
   Future<void> showUserLocation() async {
-    LocationData? currentLocationData = await Location().getLocation();
-    if (currentLocationData != null) {
+    try {
+      Position currentPosition = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+
       setState(() {
         _currentPosition = LatLng(
-          currentLocationData.latitude!,
-          currentLocationData.longitude!,
+          currentPosition.latitude,
+          currentPosition.longitude,
         );
       });
 
-      GoogleMapController controller =
-          await _controller.future; // Added .future
+      GoogleMapController controller = await _controller.future;
       controller
           .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 16));
 
-      Location().onLocationChanged.listen((LocationData locationData) {
+      // Set up position stream
+      StreamSubscription<Position> positionStream =
+          Geolocator.getPositionStream(
+              locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // Update every 10 meters
+      )).listen((Position position) {
         setState(() {
-          _currentPosition =
-              LatLng(locationData.latitude!, locationData.longitude!);
+          _currentPosition = LatLng(position.latitude, position.longitude);
         });
 
         if (!_cameraMoved) {
@@ -584,15 +590,13 @@ class MapSampleState extends State<MapSample> {
           _cameraMoved = true;
         }
 
-        // You'll need to provide a destination for this call
         if (_destinationLatLng != null) {
-          // Add this check
           _fetchRouteFromApi(
               _currentPosition!, _destinationLatLng!, _destination);
         }
       });
-    } else {
-      print('Error: Cannot get current location');
+    } catch (e) {
+      print('Error: Cannot get current location - $e');
     }
   }
 
