@@ -362,7 +362,6 @@ class MapSampleState extends State<MapSample> {
                               _searchController.clear();
                               _searchText = '';
 
-                              // Call the route fetching function with all required parameterss
                               Geolocator.getCurrentPosition()
                                   .then((Position position) {
                                 if (position != null) {
