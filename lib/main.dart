@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:maps/MarkerController.dart';
@@ -62,20 +61,24 @@ class MapSampleState extends State<MapSample> {
   List<Marker> markers = [];
   String _searchText = '';
   Marker? _userMarker;
-  final LatLng _startLocation =
-      const LatLng(14.039614599717076, 100.72766444381722);
+  List<LatLng> _polylineCoordinates = [];
+  bool _hasShownArrivalDialog = false;
   late PanelController _panelController;
   bool _showPanel = false;
   double travelDuration = 0.0;
   bool _showCancelButton = false;
+  LatLng? _currentPosition;
+  LatLng? _destinationLatLng;
+  Set<Polyline> _polylines = {};
+
+  List<LatLng> _routeCoordinates = [];
+  bool _cameraMoved = false;
   BitmapDescriptor userLocationIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _markerIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _toilet = BitmapDescriptor.defaultMarker;
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
   final MarkerController _markerController = MarkerController();
-  List<LatLng> _routeCoordinates = [];
-  LatLng? _destinationLatLng;
   String _destination = '';
   StreamSubscription<Position>? _locationSubscription;
   @override
@@ -342,17 +345,16 @@ class MapSampleState extends State<MapSample> {
                                 _destinationLatLng = destinationLatLng;
                                 _destination = selectedLocation;
 
-                                _markers.add(
-                                  Marker(
-                                    markerId: MarkerId('destination_$index'),
-                                    position: destinationLatLng,
-                                    infoWindow: InfoWindow(
-                                      title: selectedLocation,
-                                      snippet: detail,
-                                      onTap: () => _onMarkerTap(
-                                          destinationLatLng, selectedLocation),
-                                    ),
-                                  ),
+                                // Add marker for the selected location
+                                _markerController.addMarker(
+                                  id: 'destination_$index',
+                                  position: destinationLatLng,
+                                  title: selectedLocation,
+                                  icon: BitmapDescriptor.defaultMarker,
+                                  onTap: (LatLng tappedPosition) {
+                                    _onMarkerTap(
+                                        tappedPosition, selectedLocation);
+                                  },
                                 );
                               });
 
@@ -362,18 +364,8 @@ class MapSampleState extends State<MapSample> {
                               _searchController.clear();
                               _searchText = '';
 
-                              Geolocator.getCurrentPosition()
-                                  .then((Position position) {
-                                if (position != null) {
-                                  LatLng currentPosition = LatLng(
-                                      position.latitude, position.longitude);
-                                  _fetchRouteFromApi(
-                                      currentPosition,
-                                      destinationLatLng,
-                                      selectedLocation // Add the destination name
-                                      );
-                                }
-                              });
+                              // Remove this section to prevent automatic route fetching
+                              // Geolocator.getCurrentPosition().then((Position position) {...});
                             },
                             child: Container(
                               decoration: BoxDecoration(
@@ -403,159 +395,10 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  void _onMarkerTap(LatLng endLocation, String destination) {
-    final routeController = RouteController(
-      onRouteFetched: (polylineCoordinates, steps) {
-        setState(() {
-          _steps = List<Map<String, dynamic>>.from(steps);
-          _polylines.clear();
-          _addPolyline(polylineCoordinates);
-        });
-      },
-    );
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Show Route'),
-          content: Text('Do you want to display the route to this point?'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                routeController.fetchAndCalculateRoutes(
-                  _currentPosition!,
-                  endLocation,
-                  destination, // Add the destination parameter
-                );
-              },
-              child: Text('Yes'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('No'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _addPolyline(List<LatLng> polylineCoordinates) {
-    final String polylineIdVal =
-        'polyline_id_${DateTime.now().millisecondsSinceEpoch}';
-    setState(() {
-      _polylines.add(Polyline(
-        polylineId: PolylineId(polylineIdVal),
-        width: 5,
-        color: Colors.blue,
-        points: polylineCoordinates,
-      ));
-    });
-    setState(() {
-      _routeCoordinates.addAll(polylineCoordinates); // แก้ไขที่นี่
-      _polylines.add(Polyline(
-        polylineId: PolylineId('route'),
-        points: _routeCoordinates,
-        color: Colors.blue,
-        width: 5,
-      ));
-    });
-  }
-
-  Set<Polyline> _polylines = {};
   List<Marker> _markers = [];
   List<Map<String, dynamic>> _steps = [];
-  Marker? _currentLocationMarker;
 
   double _travelDuration = 0.0;
-
-  Future<void> getShortestRoute(LatLng destinationLatLng, detail) async {
-    setState(() {
-      _polylines.clear();
-      _showCancelButton = true;
-      _showPanel = false;
-    });
-
-    PolylinePoints polylinePoints = PolylinePoints();
-    PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-      'AIzaSyCKrCcDsIhfgQW9DuhOAJzNyCK06ieo0ks',
-      PointLatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-      PointLatLng(destinationLatLng.latitude, destinationLatLng.longitude),
-      travelMode: TravelMode.walking,
-    );
-
-    if (result.points.isNotEmpty) {
-      List<LatLng> polylineCoordinates = [];
-      result.points.forEach(
-        (PointLatLng point) => polylineCoordinates.add(
-          LatLng(point.latitude, point.longitude),
-        ),
-      );
-
-      setState(() {
-        _polylines.add(
-          Polyline(
-            polylineId: PolylineId('เส้นทางการเดิน'),
-            points: polylineCoordinates,
-            width: 4,
-            color: Color.fromRGBO(10, 239, 255, 1),
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-            jointType: JointType.round,
-          ),
-        );
-      });
-
-      // คำนวณระยะเวลาในการเดินทาง
-      _travelDuration =
-          await calculateTravelDuration(polylineCoordinates, destinationLatLng);
-
-      setState(() {
-        _showPanel = true;
-      });
-      _panelController.open();
-
-      // Check if last point of polyline is near destination
-      LatLng lastPoint = polylineCoordinates.last;
-      double distanceToDestination = Geolocator.distanceBetween(
-        lastPoint.latitude,
-        lastPoint.longitude,
-        destinationLatLng.latitude,
-        destinationLatLng.longitude,
-      );
-
-      if (distanceToDestination < 10) {
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              backgroundColor: Colors.white, // เปลี่ยนสีพื้นหลังเป็นสีขาว
-              title: Text('Destination Reached'),
-              content: Text(detail),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
-      }
-    } else {
-      // ไม่แสดง SlidingUpPanel หากไม่มีการแสดงเส้นทาง
-      _panelController.close();
-    }
-  }
-
-  bool _cameraMoved = false;
-  LatLng? _currentPosition;
 
   Future<void> showUserLocation() async {
     try {
@@ -571,15 +414,15 @@ class MapSampleState extends State<MapSample> {
 
       GoogleMapController controller = await _controller.future;
       controller
-          .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 16));
+          .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 15));
 
-      // Set up position stream
       StreamSubscription<Position> positionStream =
           Geolocator.getPositionStream(
-              locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Update every 10 meters
-      )).listen((Position position) {
+        locationSettings: LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 1,
+            timeLimit: Duration(seconds: 1)),
+      ).listen((Position position) {
         setState(() {
           _currentPosition = LatLng(position.latitude, position.longitude);
         });
@@ -589,9 +432,9 @@ class MapSampleState extends State<MapSample> {
           _cameraMoved = true;
         }
 
+        // Update route and check for arrival
         if (_destinationLatLng != null) {
-          _fetchRouteFromApi(
-              _currentPosition!, _destinationLatLng!, _destination);
+          _updateRouteProgress(_currentPosition!, _destinationLatLng!);
         }
       });
     } catch (e) {
@@ -599,69 +442,129 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-  void _fetchRouteFromApi(
+  int _findNextUnreachedStep(LatLng currentPosition) {
+    final double stepThreshold =
+        5.0; // meters - distance to consider a step reached
+
+    for (int i = 0; i < _steps.length; i++) {
+      final stepPoint = _steps[i]['point'] as LatLng;
+
+      double distanceToStep = Geolocator.distanceBetween(
+        currentPosition.latitude,
+        currentPosition.longitude,
+        stepPoint.latitude,
+        stepPoint.longitude,
+      );
+
+      if (distanceToStep > stepThreshold) {
+        return i;
+      }
+    }
+
+    return _steps.length - 1;
+  }
+
+  void _updateRouteProgress(LatLng currentPosition, LatLng destination) {
+    if (_steps.isEmpty || _polylineCoordinates.isEmpty) return;
+
+    int nextStepIndex = _findNextUnreachedStep(currentPosition);
+    setState(() {
+      if (nextStepIndex > 0 && nextStepIndex < _polylineCoordinates.length) {
+        _polylineCoordinates = _polylineCoordinates.sublist(nextStepIndex);
+        _updatePolyline();
+      }
+    });
+
+    double distanceToDestination = Geolocator.distanceBetween(
+      currentPosition.latitude,
+      currentPosition.longitude,
+      destination.latitude,
+      destination.longitude,
+    );
+
+    if (distanceToDestination <= 50 && !_hasShownArrivalDialog) {
+      _showArrivalDialog();
+      _hasShownArrivalDialog = true;
+    }
+  }
+
+  void _updatePolyline() {
+    _polylines.clear();
+    _polylines.add(
+      Polyline(
+        polylineId: const PolylineId('route'),
+        points: _polylineCoordinates,
+        color: Colors.blue,
+        width: 5,
+      ),
+    );
+  }
+
+  void _showArrivalDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('ถึงจุดหมายแล้ว'),
+          content: Text('คุณได้เดินทางมาถึงจุดหมายเรียบร้อยแล้ว'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Clear the route after arrival
+                setState(() {
+                  _polylines.clear();
+                  _polylineCoordinates.clear();
+                  _steps.clear();
+                });
+              },
+              child: Text('ตกลง'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  bool _hasRequestedRoute = false;
+
+  void _fetchRouteFromApiOnce(
       LatLng currentPosition, LatLng destinationLatLng, String destination) {
+    if (_hasRequestedRoute) return;
+
     final routeController = RouteController(
       onRouteFetched: (polylineCoordinates, steps) {
         setState(() {
           _steps = List<Map<String, dynamic>>.from(steps);
-          _polylines.clear();
-          _addPolyline(polylineCoordinates);
+          _polylines.clear(); // เคลียร์เส้นทางก่อน
+          _addPolyline(polylineCoordinates); // เพิ่มเส้นทางใหม่
         });
       },
     );
 
-    routeController.fetchAndCalculateRoutes(
-      currentPosition,
-      destinationLatLng,
-      destination,
-    );
+    _hasRequestedRoute = true;
+
+    routeController.fetchAndCalculateRoutes(currentPosition, destinationLatLng);
   }
 
-  void showDialogForDirections(
-      String destinationName, LatLng destinationLatLng, detail) {
+  void _onMarkerTap(LatLng endLocation, String destination) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: Colors.white,
-          title: Text(' $destinationName'),
-          content: Text('ต้องการแสดงเส้นทางไปที่ $destinationName หรือไม่'),
-          actions: [
+          title: Text('แสดงเส้นทาง'),
+          content: Text('ต้องการให้แสดงเส้นทางไปยัง $destination หรือไม่'),
+          actions: <Widget>[
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                getShortestRoute(destinationLatLng, detail);
-              },
-              child: Text('ใช่'),
-            ),
-            TextButton(
-              onPressed: () {
-                // Get and display directions
 
-                Navigator.of(context).pop();
-              },
-              child: Text('ไม่'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _categoryLocation(String destinationName, LatLng destinationLatLng) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          title: Text(' $destinationName'),
-          content: Text('ต้องการแสดงเส้นทางไปที่ $destinationName หรือไม่'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showCategoryDirection(destinationLatLng);
+                if (_currentPosition != null) {
+                  // Only fetch route when user confirms
+                  _fetchRouteFromApiOnce(
+                      _currentPosition!, endLocation, destination);
+                }
               },
               child: Text('ใช่'),
             ),
@@ -677,94 +580,34 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  Future<double> calculateTravelDuration(
-      List<LatLng> polylineCoordinates, LatLng destinationLatLng) async {
-    double totalDistance = 0.0;
-    double walkingSpeed = 5.0;
+  void _addPolyline(List<LatLng> polylineCoordinates) {
+    _polylineCoordinates = polylineCoordinates; // Fixed variable name
+    _updatePolyline();
+    final String polylineIdVal =
+        'polyline_id_${DateTime.now().millisecondsSinceEpoch}';
 
-    for (int i = 0; i < polylineCoordinates.length - 1; i++) {
-      double distance = await Geolocator.distanceBetween(
-        polylineCoordinates[i].latitude,
-        polylineCoordinates[i].longitude,
-        polylineCoordinates[i + 1].latitude,
-        polylineCoordinates[i + 1].longitude,
-      );
-      totalDistance += distance;
-    }
-
-    double distanceToDestination = await Geolocator.distanceBetween(
-      polylineCoordinates.last.latitude,
-      polylineCoordinates.last.longitude,
-      destinationLatLng.latitude,
-      destinationLatLng.longitude,
-    );
-    totalDistance += distanceToDestination;
-
-    double travelDuration = (totalDistance / 1000.0) / (walkingSpeed / 60.0);
-
-    return travelDuration;
-  }
-
-  Future<void> _showCategoryDirection(LatLng destinationLatLng) async {
     setState(() {
-      _polylines.clear();
-      _showCancelButton = true; // แสดงปุ่มยกเลิก
-      _showPanel = false; // ซ่อน SlidingUpPanel ก่อน
+      _polylines.add(Polyline(
+        polylineId: PolylineId(polylineIdVal),
+        width: 5,
+        color: Colors.blue,
+        points: polylineCoordinates,
+      ));
     });
 
-    PolylinePoints polylinePoints = PolylinePoints();
-    PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-      'AIzaSyCKrCcDsIhfgQW9DuhOAJzNyCK06ieo0ks',
-      PointLatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-      PointLatLng(destinationLatLng.latitude, destinationLatLng.longitude),
-      travelMode: TravelMode.walking,
-    );
-
-    if (result.points.isNotEmpty) {
-      List<LatLng> polylineCoordinates = [];
-      result.points.forEach(
-        (PointLatLng point) => polylineCoordinates.add(
-          LatLng(point.latitude, point.longitude),
-        ),
-      );
-
-      setState(() {
-        _polylines.add(
-          Polyline(
-            polylineId: PolylineId('เส้นทางการเดิน'),
-            points: polylineCoordinates,
-            width: 4,
-            color: Color.fromRGBO(10, 239, 255, 1),
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-            jointType: JointType.round,
-          ),
-        );
-      });
-
-      _travelDuration =
-          await calculateTravelDuration(polylineCoordinates, destinationLatLng);
-
-      setState(() {
-        _showPanel = true;
-      });
-      _panelController.open();
-
-      LatLng lastPoint = polylineCoordinates.last;
-      double distanceToDestination = Geolocator.distanceBetween(
-        lastPoint.latitude,
-        lastPoint.longitude,
-        destinationLatLng.latitude,
-        destinationLatLng.longitude,
-      );
-
-      if (distanceToDestination < 10) {}
-    } else {
-      _panelController.close();
-    }
+    // Add to route coordinates
+    setState(() {
+      _routeCoordinates.addAll(polylineCoordinates);
+      _polylines.add(Polyline(
+        polylineId: PolylineId('route'),
+        points: _routeCoordinates,
+        color: Colors.blue,
+        width: 5,
+      ));
+    });
   }
 
-  void _showMenu() {
+  _showMenu() {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -780,14 +623,14 @@ class MapSampleState extends State<MapSample> {
                 ),
                 title: Text('ห้องน้ำ'),
                 onTap: () {
-                  setState(() {
-                    _markerController.addToiletMarkers(
-                      (LatLng position) {
-                        _categoryLocation('ห้องน้ำ 1', position);
-                      },
-                      BitmapDescriptor.defaultMarker,
-                    );
-                  });
+                  // setState(() {
+                  //   _markerController.addToiletMarkers(
+                  //     (LatLng position) {
+                  //       _categoryLocation('ห้องน้ำ 1', position);
+                  //     },
+                  //     BitmapDescriptor.defaultMarker,
+                  //   );
+                  // });
                   Navigator.pop(context);
                 },
               ),
@@ -795,12 +638,12 @@ class MapSampleState extends State<MapSample> {
                 leading: Icon(Icons.food_bank),
                 title: Text('จุดขายอาหารและเครื่องดื่ม'),
                 onTap: () {
-                  setState(() {
-                    _markerController.addFoodMarkers((LatLng position) {
-                      _categoryLocation('Food Location', position);
-                    });
-                  });
-                  Navigator.pop(context);
+                  // setState(() {
+                  //   _markerController.addFoodMarkers((LatLng position) {
+                  //     _categoryLocation('Food Location', position);
+                  //   });
+                  // });
+                  // Navigator.pop(context);
                 },
               ),
             ],

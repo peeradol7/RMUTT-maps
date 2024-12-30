@@ -1,0 +1,161 @@
+{
+    "routes": [
+      {
+        "method": "walk",
+        "data": [
+          {
+    "distance": { "text": "950 m", "value": 950 },
+    "duration": { "text": "13 mins", "value": 780 },
+    "end_address": "อาคารวิศวกรรมไฟฟ้า",
+    "end_location": { "lat": 14.036299693056009, "lng": 100.72526581395822 },
+    "start_address": "คณะวิทยาศาสตร์และเทคโนโลยี",
+    "start_location": { "lat": 14.039547186216867, "lng": 100.72893355062415 },
+    "steps": [
+      {
+        "distance": { "text": "40 m", "value": 40 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.039584359471851, "lng": 100.7285769489625 },
+        "instructions": "",
+        "start_location": { "lat": 14.039547186216867, "lng": 100.72893355062415 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "50 m", "value": 50 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.039430965699937, "lng": 100.7285886876873 },
+        "instructions": "",
+        "start_location": { "lat": 14.039584359471851, "lng": 100.7285769489625 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "30 m", "value": 30 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.039365323078378, "lng": 100.72859545406702 },
+        "instructions": "",
+        "start_location": { "lat": 14.039430965699937, "lng": 100.7285886876873 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "50 m", "value": 50 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.039241546112962, "lng": 100.72860183347098 },
+        "instructions": "",
+        "start_location": { "lat": 14.039365323078378, "lng": 100.72859545406702 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "60 m", "value": 60 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.039007130930901, "lng": 100.72843467911848 },
+        "instructions": "",
+        "start_location": { "lat": 14.039241546112962, "lng": 100.72860183347098 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "50 m", "value": 50 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.038876615064545, "lng": 100.72832058867215 },
+        "instructions": "",
+        "start_location": { "lat": 14.039007130930901, "lng": 100.72843467911848 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "40 m", "value": 40 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.03874970567218, "lng": 100.72832961051175 },
+        "instructions": "",
+        "start_location": { "lat": 14.038876615064545, "lng": 100.72832058867215 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "60 m", "value": 60 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.038583410499932, "lng": 100.72832509959194 },
+        "instructions": "",
+        "start_location": { "lat": 14.03874970567218, "lng": 100.72832961051175 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "50 m", "value": 50 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.038425867593842, "lng": 100.72833186597164 },
+        "instructions": "",
+        "start_location": { "lat": 14.038583410499932, "lng": 100.72832509959194 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "30 m", "value": 30 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.03822018641454, "lng": 100.72832509959194 },
+        "instructions": "",
+        "start_location": { "lat": 14.038425867593842, "lng": 100.72833186597164 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "70 m", "value": 70 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.037918228595528, "lng": 100.72815819554889 },
+        "instructions": "",
+        "start_location": { "lat": 14.03822018641454, "lng": 100.72832509959194 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "90 m", "value": 90 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.037902911884382, "lng": 100.72773868000729 },
+        "instructions": "",
+        "start_location": { "lat": 14.037918228595528, "lng": 100.72815819554889 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "100 m", "value": 100 },
+        "duration": { "text": "2 mins", "value": 120 },
+        "end_location": { "lat": 14.037911664290869, "lng": 100.72686356156571 },
+        "instructions": "",
+        "start_location": { "lat": 14.037902911884382, "lng": 100.72773868000729 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "80 m", "value": 80 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.037545057474103, "lng": 100.7265888832456 },
+        "instructions": "",
+        "start_location": { "lat": 14.037911664290869, "lng": 100.72686356156571 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "50 m", "value": 50 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.037549035901295, "lng": 100.72593531664393 },
+        "instructions": "",
+        "start_location": { "lat": 14.037545057474103, "lng": 100.7265888832456 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "50 m", "value": 50 },
+        "duration": { "text": "1 min", "value": 60 },
+        "end_location": { "lat": 14.037398158325145, "lng": 100.72574755242772 },
+        "instructions": "",
+        "start_location": { "lat": 14.037549035901295, "lng": 100.72593531664393 },
+        "is_completed": false
+      },
+      {
+        "distance": { "text": "100 m", "value": 100 },
+        "duration": { "text": "2 mins", "value": 120 },
+        "end_location": { "lat": 14.036299693056009, "lng": 100.72526581395822 },
+        "instructions": "",
+        "start_location": { "lat": 14.037398158325145, "lng": 100.72574755242772 },
+        "is_completed": false
+      }
+    ]
+  }
+],
+"overview_polyline": {
+  "points": "encoded_polyline_string"
+},
+"summary": "Route through the campus",
+"is_completed": false
+}
+],
+"status": "OK"
+}
