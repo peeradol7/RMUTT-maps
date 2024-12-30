@@ -313,39 +313,68 @@ class MapSampleState extends State<MapSample> {
                 child: StreamBuilder(
                   stream: FirebaseFirestore.instance
                       .collection('rmuttlocations')
-                      .where('namelocation',
-                          isGreaterThanOrEqualTo: _searchText)
-                      .where('namelocation',
-                          isLessThanOrEqualTo: _searchText + '\uf8ff')
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return CircularProgressIndicator();
                     }
+
+                    // กรองข้อมูลที่มี field namelocation และ match กับคำค้นหา
+                    var filteredDocs = snapshot.data!.docs.where((doc) {
+                      try {
+                        // ตรวจสอบว่ามี field namelocation หรือไม่
+                        if (!doc.data().containsKey('namelocation')) {
+                          return false;
+                        }
+
+                        String locationName =
+                            doc['namelocation'].toString().toLowerCase();
+                        String searchQuery = _searchText.toLowerCase().trim();
+
+                        // ถ้าไม่มีคำค้นหา ให้แสดงทั้งหมด
+                        if (searchQuery.isEmpty) {
+                          return true;
+                        }
+
+                        // ค้นหาแบบ contains
+                        return locationName.contains(searchQuery);
+                      } catch (e) {
+                        // ถ้าเกิด error ในการเข้าถึงข้อมูล ให้ข้ามรายการนั้น
+                        return false;
+                      }
+                    }).toList();
+
                     return ListView.builder(
-                      itemCount: snapshot.data?.docs.length ?? 0,
+                      itemCount: filteredDocs.length,
                       itemBuilder: (context, index) {
-                        if (snapshot.hasData &&
-                            snapshot.data!.docs.isNotEmpty) {
+                        try {
+                          // ตรวจสอบว่ามีข้อมูลครบหรือไม่
+                          final doc = filteredDocs[index].data();
+                          final hasRequiredFields =
+                              doc.containsKey('namelocation') &&
+                                  doc.containsKey('latitude') &&
+                                  doc.containsKey('longitude') &&
+                                  doc.containsKey('detail');
+
+                          if (!hasRequiredFields) {
+                            return ListTile(
+                              title: Text('ข้อมูลไม่ครบถ้วน'),
+                            );
+                          }
+
                           return GestureDetector(
                             onTap: () {
-                              var selectedLocation =
-                                  snapshot.data!.docs[index]['namelocation'];
-                              var latitude =
-                                  snapshot.data!.docs[index]['latitude'];
-                              var longitude =
-                                  snapshot.data!.docs[index]['longitude'];
-                              var detail = snapshot.data!.docs[index]['detail'];
+                              var selectedLocation = doc['namelocation'];
+                              var latitude = doc['latitude'];
+                              var longitude = doc['longitude'];
+                              var detail = doc['detail'];
 
                               LatLng destinationLatLng =
                                   LatLng(latitude, longitude);
-
-                              // Update the class variables
                               setState(() {
                                 _destinationLatLng = destinationLatLng;
                                 _destination = selectedLocation;
 
-                                // Add marker for the selected location
                                 _markerController.addMarker(
                                   id: 'destination_$index',
                                   position: destinationLatLng,
@@ -358,30 +387,24 @@ class MapSampleState extends State<MapSample> {
                                 );
                               });
 
-                              // Update the TextField and clear the search text
                               textFieldOnTap(_searchController,
                                   selectedLocation, setState, _searchText);
                               _searchController.clear();
                               _searchText = '';
-
-                              // Remove this section to prevent automatic route fetching
-                              // Geolocator.getCurrentPosition().then((Position position) {...});
                             },
                             child: Container(
                               decoration: BoxDecoration(
                                 color: Color.fromARGB(253, 255, 253, 253),
                               ),
                               child: ListTile(
-                                title: Text(
-                                    snapshot.data!.docs[index]['namelocation']),
-                                subtitle:
-                                    Text(snapshot.data!.docs[index]['detail']),
+                                title: Text(doc['namelocation']),
+                                subtitle: Text(doc['detail']),
                               ),
                             ),
                           );
-                        } else {
+                        } catch (e) {
                           return ListTile(
-                            title: Text('No data available'),
+                            title: Text('เกิดข้อผิดพลาดในการแสดงข้อมูล'),
                           );
                         }
                       },
@@ -389,7 +412,7 @@ class MapSampleState extends State<MapSample> {
                   },
                 ),
               ),
-            ),
+            )
         ],
       ),
     );
