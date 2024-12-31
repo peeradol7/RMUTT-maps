@@ -7,9 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:maps/DirectionController.dart';
 import 'package:maps/MarkerController.dart';
 import 'package:maps/OpenChat/Main.dart';
-import 'package:maps/RoutesController.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
@@ -54,12 +54,13 @@ class MapSample extends StatefulWidget {
 
 class MapSampleState extends State<MapSample> {
   String? userSelected;
-  GoogleMapController? _controllers;
+
   final Completer<GoogleMapController> _controller =
       Completer<GoogleMapController>();
   final TextEditingController _searchController = TextEditingController();
   List<Marker> markers = [];
   String _searchText = '';
+  String? _searchType = '';
   Marker? _userMarker;
   List<LatLng> _polylineCoordinates = [];
   bool _hasShownArrivalDialog = false;
@@ -70,7 +71,7 @@ class MapSampleState extends State<MapSample> {
   LatLng? _currentPosition;
   LatLng? _destinationLatLng;
   Set<Polyline> _polylines = {};
-
+  bool _isLoadingRoute = false;
   List<LatLng> _routeCoordinates = [];
   bool _cameraMoved = false;
   BitmapDescriptor userLocationIcon = BitmapDescriptor.defaultMarker;
@@ -81,10 +82,10 @@ class MapSampleState extends State<MapSample> {
   final MarkerController _markerController = MarkerController();
   String _destination = '';
   StreamSubscription<Position>? _locationSubscription;
+
   @override
   void initState() {
     super.initState();
-    _requestPermission();
     _panelController = PanelController();
     _setMarkerIcon();
   }
@@ -108,41 +109,6 @@ class MapSampleState extends State<MapSample> {
     _toilet = BitmapDescriptor.fromBytes(toiletIcon);
   }
 
-  Future<void> _requestPermission() async {
-    LocationPermission permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse) {
-      _startLocationUpdates();
-    } else {
-      print('Location permission denied');
-    }
-  }
-
-  void _startLocationUpdates() {
-    _locationSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Updates every 10 meters
-      ),
-    ).listen((Position position) {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-      _updateUserMarker();
-    });
-  }
-
-  void _updateUserMarker() {
-    if (_currentPosition != null) {
-      setState(() {
-        _userMarker = Marker(
-          markerId: MarkerId('user_marker'),
-          position: _currentPosition!,
-          icon: BitmapDescriptor.defaultMarker,
-          infoWindow: InfoWindow(title: 'Your Location'),
-        );
-      });
-    }
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -154,6 +120,23 @@ class MapSampleState extends State<MapSample> {
     target: LatLng(14.03658958923885, 100.72790357867967),
     zoom: 16,
   );
+
+  void searchTypeLocation(String query) {
+    switch (query.toLowerCase()) {
+      case 'ห้องเรียน':
+        _searchType = 'ห้องเรียน';
+        break;
+      case 'ห้องน้ำ':
+      case 'สุขา':
+      case 'toilet':
+        _searchType = 'ห้องน้ำ';
+        break;
+      case 'ซุ้ม':
+        _searchType = 'จุดขายอาหาร';
+      default:
+        _searchType = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,10 +152,11 @@ class MapSampleState extends State<MapSample> {
             onChanged: (value) {
               setState(() {
                 _searchText = value;
+                searchTypeLocation(value);
               });
             },
             decoration: InputDecoration(
-              hintText: 'Search',
+              hintText: 'ค้นหา',
               border: InputBorder.none,
               prefixIcon: Icon(Icons.search, color: Colors.grey),
               contentPadding:
@@ -239,7 +223,7 @@ class MapSampleState extends State<MapSample> {
               _controller.complete(controller);
             },
           ),
-          if (_showPanel)
+          if (_polylines.isNotEmpty)
             SlidingUpPanel(
               controller: _panelController,
               maxHeight: 100.0,
@@ -247,40 +231,43 @@ class MapSampleState extends State<MapSample> {
               borderRadius: BorderRadius.vertical(top: Radius.circular(19.0)),
               panel: Column(
                 children: [
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        'เวลาในการเดินทางโดยประมาณ : ${_travelDuration.toStringAsFixed(2)} นาที',
-                        style: TextStyle(
-                          fontSize: 19,
-                          color: Color.fromARGB(255, 0, 0, 0),
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Expanded(
+                  //   child: Center(
+                  //     child: Text(
+                  //       'เวลาในการเดินทางโดยประมาณ : ${_travelDuration.toStringAsFixed(2)} นาที',
+                  //       style: TextStyle(
+                  //         fontSize: 19,
+                  //         color: Color.fromARGB(255, 0, 0, 0),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      if (_showCancelButton)
-                        ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _polylines.clear();
-                              _showCancelButton = false;
-                              _markers.clear();
-                              _showPanel = false; // ซ่อน SlidingUpPanel
-                            });
-                          },
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _polylines.clear();
+                            _showCancelButton = false;
+                            _markers.clear();
+                            _showPanel = false;
+                          });
+                        },
+                        child: Center(
                           child: Text('ยกเลิกการแสดงเส้นทาง'),
                         ),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-          if (_markers.length > 1 ||
-              (_markers.length == 1 &&
-                  _markers.first.markerId != const MarkerId('currentLocation')))
+          if (_markerController.markers.isNotEmpty &&
+              !(_markerController.markers.length == 1 &&
+                  _markerController.markers.first.markerId.value ==
+                      'currentLocation') &&
+              _polylines.isEmpty)
             Positioned(
               top: 5,
               right: 16.0,
@@ -290,8 +277,8 @@ class MapSampleState extends State<MapSample> {
                 child: FloatingActionButton(
                   onPressed: () {
                     setState(() {
-                      _markers.removeWhere((marker) =>
-                          marker.markerId != const MarkerId('currentLocation'));
+                      _markerController.clearMarkers(
+                          exceptId: 'currentLocation');
                     });
                   },
                   child: const Text('ปิดจุดมาร์ค'),
@@ -304,51 +291,63 @@ class MapSampleState extends State<MapSample> {
           if (_searchText.isEmpty)
             Container()
           else
-            Positioned(
-              top: 0,
-              left: 16.0,
-              right: 16.0,
-              bottom: 0.0,
-              child: SizedBox.expand(
-                child: StreamBuilder(
-                  stream: FirebaseFirestore.instance
-                      .collection('rmuttlocations')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return CircularProgressIndicator();
+            StreamBuilder(
+              stream: FirebaseFirestore.instance
+                  .collection('rmuttlocations')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return Center(child: CircularProgressIndicator());
+                }
+
+                var filteredDocs = snapshot.data!.docs.where((doc) {
+                  try {
+                    if (!doc.data().containsKey('namelocation') ||
+                        !doc.data().containsKey('type')) {
+                      return false;
                     }
 
-                    // กรองข้อมูลที่มี field namelocation และ match กับคำค้นหา
-                    var filteredDocs = snapshot.data!.docs.where((doc) {
-                      try {
-                        // ตรวจสอบว่ามี field namelocation หรือไม่
-                        if (!doc.data().containsKey('namelocation')) {
-                          return false;
-                        }
+                    String locationName =
+                        doc['namelocation'].toString().toLowerCase();
+                    String locationType = doc['type'].toString().toLowerCase();
+                    String searchQuery = _searchText.toLowerCase().trim();
 
-                        String locationName =
-                            doc['namelocation'].toString().toLowerCase();
-                        String searchQuery = _searchText.toLowerCase().trim();
+                    if (_searchType != null) {
+                      return locationType == _searchType;
+                    } else {
+                      return locationName.contains(searchQuery);
+                    }
+                  } catch (e) {
+                    return false;
+                  }
+                }).toList();
 
-                        // ถ้าไม่มีคำค้นหา ให้แสดงทั้งหมด
-                        if (searchQuery.isEmpty) {
-                          return true;
-                        }
+                if (filteredDocs.isEmpty) {
+                  return Container();
+                }
 
-                        // ค้นหาแบบ contains
-                        return locationName.contains(searchQuery);
-                      } catch (e) {
-                        // ถ้าเกิด error ในการเข้าถึงข้อมูล ให้ข้ามรายการนั้น
-                        return false;
-                      }
-                    }).toList();
-
-                    return ListView.builder(
+                return Positioned(
+                  top: 0,
+                  left: 16.0,
+                  right: 16.0,
+                  child: Container(
+                    height: 300,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ListView.builder(
                       itemCount: filteredDocs.length,
                       itemBuilder: (context, index) {
                         try {
-                          // ตรวจสอบว่ามีข้อมูลครบหรือไม่
                           final doc = filteredDocs[index].data();
                           final hasRequiredFields =
                               doc.containsKey('namelocation') &&
@@ -359,6 +358,7 @@ class MapSampleState extends State<MapSample> {
                           if (!hasRequiredFields) {
                             return ListTile(
                               title: Text('ข้อมูลไม่ครบถ้วน'),
+                              tileColor: Colors.grey[100],
                             );
                           }
 
@@ -393,25 +393,41 @@ class MapSampleState extends State<MapSample> {
                               _searchText = '';
                             },
                             child: Container(
+                              margin: EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Color.fromARGB(253, 255, 253, 253),
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.grey.withOpacity(0.2),
+                                ),
                               ),
                               child: ListTile(
-                                title: Text(doc['namelocation']),
-                                subtitle: Text(doc['detail']),
+                                title: Text(
+                                  doc['namelocation'],
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  doc['detail'],
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
                           );
                         } catch (e) {
                           return ListTile(
                             title: Text('เกิดข้อผิดพลาดในการแสดงข้อมูล'),
+                            tileColor: Colors.red[50],
                           );
                         }
                       },
-                    );
-                  },
-                ),
-              ),
+                    ),
+                  ),
+                );
+              },
             )
         ],
       ),
@@ -437,7 +453,7 @@ class MapSampleState extends State<MapSample> {
 
       GoogleMapController controller = await _controller.future;
       controller
-          .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 15));
+          .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 18));
 
       StreamSubscription<Position> positionStream =
           Geolocator.getPositionStream(
@@ -455,7 +471,6 @@ class MapSampleState extends State<MapSample> {
           _cameraMoved = true;
         }
 
-        // Update route and check for arrival
         if (_destinationLatLng != null) {
           _updateRouteProgress(_currentPosition!, _destinationLatLng!);
         }
@@ -466,8 +481,7 @@ class MapSampleState extends State<MapSample> {
   }
 
   int _findNextUnreachedStep(LatLng currentPosition) {
-    final double stepThreshold =
-        5.0; // meters - distance to consider a step reached
+    final double stepThreshold = 5.0;
 
     for (int i = 0; i < _steps.length; i++) {
       final stepPoint = _steps[i]['point'] as LatLng;
@@ -552,26 +566,37 @@ class MapSampleState extends State<MapSample> {
 
   bool _hasRequestedRoute = false;
 
-  void _fetchRouteFromApiOnce(
-      LatLng currentPosition, LatLng destinationLatLng, String destination) {
-    if (_hasRequestedRoute) return;
-
-    final routeController = RouteController(
+  void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
+      String destination) async {
+    if (_isLoadingRoute) return;
+    setState(() {
+      _isLoadingRoute = true;
+      _polylines.clear();
+      _steps.clear();
+    });
+    final directionController = DirectionController(
       onRouteFetched: (polylineCoordinates, steps) {
         setState(() {
           _steps = List<Map<String, dynamic>>.from(steps);
-          _polylines.clear(); // เคลียร์เส้นทางก่อน
-          _addPolyline(polylineCoordinates); // เพิ่มเส้นทางใหม่
+          _addPolyline(polylineCoordinates);
+          _isLoadingRoute = false;
         });
       },
     );
+    await directionController.fetchAndCalculateRoutes(
+        currentPosition, destinationLatLng);
+  }
 
-    _hasRequestedRoute = true;
-
-    routeController.fetchAndCalculateRoutes(currentPosition, destinationLatLng);
+  void resetRouteRequest() {
+    setState(() {
+      _hasRequestedRoute = false;
+      _polylines.clear();
+      _steps.clear();
+    });
   }
 
   void _onMarkerTap(LatLng endLocation, String destination) {
+    if (_isLoadingRoute) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -582,9 +607,7 @@ class MapSampleState extends State<MapSample> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-
                 if (_currentPosition != null) {
-                  // Only fetch route when user confirms
                   _fetchRouteFromApiOnce(
                       _currentPosition!, endLocation, destination);
                 }
@@ -630,46 +653,69 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
-  _showMenu() {
+  void _showMenu() {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
         return Container(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              ListTile(
-                leading: Image.asset(
-                  'assets/svg/Toilet.png',
-                  width: 24,
-                  height: 24,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ListTile(
+                  leading: Image.asset(
+                    'assets/svg/Toilet.png',
+                    width: 24,
+                    height: 24,
+                  ),
+                  title: Text('ห้องน้ำ'),
+                  onTap: () {},
                 ),
-                title: Text('ห้องน้ำ'),
-                onTap: () {
-                  // setState(() {
-                  //   _markerController.addToiletMarkers(
-                  //     (LatLng position) {
-                  //       _categoryLocation('ห้องน้ำ 1', position);
-                  //     },
-                  //     BitmapDescriptor.defaultMarker,
-                  //   );
-                  // });
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.food_bank),
-                title: Text('จุดขายอาหารและเครื่องดื่ม'),
-                onTap: () {
-                  // setState(() {
-                  //   _markerController.addFoodMarkers((LatLng position) {
-                  //     _categoryLocation('Food Location', position);
-                  //   });
-                  // });
-                  // Navigator.pop(context);
-                },
-              ),
-            ],
+                ListTile(
+                  leading: Icon(Icons.food_bank),
+                  title: Text('จุดขายอาหารและเครื่องดื่ม'),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: Icon(Icons.class_),
+                  title: Text('ห้องเรียน'),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: Icon(Icons.room_service),
+                  title: Text('จุดบริการของมหาลัย'),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: Icon(Icons.library_books),
+                  title: Text('ห้องสมุด'),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: Icon(Icons.atm),
+                  title: Text('ตู้ ATM'),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: Icon(Icons.restaurant),
+                  title: Text('โรงอาหาร'),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: Icon(Icons.sports_soccer),
+                  title: Text('สนามกีฬา'),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: Icon(Icons.local_parking),
+                  title: Text('ลานจอดรถ'),
+                  onTap: () {},
+                ),
+              ],
+            ),
           ),
         );
       },

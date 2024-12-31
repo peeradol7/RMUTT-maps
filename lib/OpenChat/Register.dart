@@ -10,7 +10,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final AuthController _authController = AuthController();
-
+  bool _isButtonDisabled = false;
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -33,7 +33,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Image.asset(
-                    'assets/registerImage.png',
+                    'assets/image1.png',
                     height: 150,
                     width: 150,
                   ),
@@ -53,12 +53,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: () {
-                      _authController.sendOTP(
-                        phoneNumber: _phoneController.text.trim(),
-                        context: context,
-                      );
-                    },
+                    onPressed: _isButtonDisabled
+                        ? null
+                        : () async {
+                            setState(() => _isButtonDisabled = true);
+                            await _authController.sendOTP(
+                              phoneNumber: _phoneController.text.trim(),
+                              context: context,
+                            );
+                            // รอ 60 วินาทีก่อนจะให้กดปุ่มอีกครั้ง
+                            Future.delayed(Duration(seconds: 60), () {
+                              setState(() => _isButtonDisabled = false);
+                            });
+                          },
                     child: Text(
                       "Send OTP",
                       style:

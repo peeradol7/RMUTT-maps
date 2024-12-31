@@ -3,10 +3,10 @@ import 'dart:convert'; // สำหรับแปลง JSON
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
-class RouteController {
+class DirectionController {
   final Function(List<LatLng>, List<Map<String, dynamic>>) onRouteFetched;
 
-  RouteController({required this.onRouteFetched});
+  DirectionController({required this.onRouteFetched});
 
   Future<void> fetchAndCalculateRoutes(LatLng start, LatLng end) async {
     final url = Uri.parse('http://192.168.1.38:5000/find-path');

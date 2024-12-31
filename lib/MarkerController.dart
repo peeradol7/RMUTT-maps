@@ -23,40 +23,11 @@ class MarkerController {
     );
   }
 
-  void addToiletMarkers(Function(LatLng) onTap, BitmapDescriptor icon) {
-    addMarker(
-      id: 'ห้องน้ำ1',
-      position: LatLng(14.035978558473701, 100.72472173847785),
-      title: 'ห้องน้ำ 1',
-      icon: icon,
-      onTap: onTap,
-    );
-  }
-
-  void addFoodMarkers(Function(LatLng) onTap) {
-    List<Map<String, dynamic>> foodLocations = [
-      {
-        'id': 'ตู้เต่าบิน1',
-        'position': LatLng(14.0341588, 100.7298778),
-        'title': 'ตู้เต่าบิน1',
-        'icon': BitmapDescriptor.hueAzure,
-      },
-      {
-        'id': 'ศูนย์อาหารช่อพวงชมพู',
-        'position': LatLng(14.039641633441367, 100.72955146567259),
-        'title': 'ศูนย์อาหารช่อพวงชมพู',
-        'icon': BitmapDescriptor.hueAzure,
-      },
-    ];
-
-    for (var location in foodLocations) {
-      addMarker(
-        id: location['id'],
-        position: location['position'],
-        title: location['title'],
-        icon: BitmapDescriptor.defaultMarkerWithHue(location['icon']),
-        onTap: (LatLng position) {},
-      );
+  void clearMarkers({String? exceptId}) {
+    if (exceptId != null) {
+      _markers.removeWhere((marker) => marker.markerId.value != exceptId);
+    } else {
+      _markers.clear();
     }
   }
 }

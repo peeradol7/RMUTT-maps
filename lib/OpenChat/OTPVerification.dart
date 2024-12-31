@@ -20,143 +20,55 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
-
   final AuthController _authController = AuthController();
-
-  bool isValidUsername(String username) {
-    // Username must contain only English letters and numbers, and be at least 6 characters long
-    return RegExp(r'^[a-zA-Z0-9]{6,}$').hasMatch(username);
-  }
-
-  bool isValidPassword(String password) {
-    return RegExp(r'^[a-zA-Z0-9]{8,}$').hasMatch(password);
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Verify OTP"),
-        foregroundColor: Colors.white,
+        title: Text('Verify OTP'),
         backgroundColor: Colors.teal,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             TextField(
               controller: _otpController,
-              decoration: InputDecoration(
-                labelText: "ใส่รหัส OTP",
-                border: OutlineInputBorder(),
-              ),
+              decoration: InputDecoration(labelText: 'Enter OTP'),
               keyboardType: TextInputType.number,
             ),
-            SizedBox(height: 16), // Add space between fields
             TextField(
               controller: _nameController,
-              decoration: InputDecoration(
-                labelText: "Name",
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.text,
+              decoration: InputDecoration(labelText: 'Name'),
             ),
-            SizedBox(height: 16), // Add space between fields
             TextField(
               controller: _usernameController,
-              decoration: InputDecoration(
-                labelText: "Username",
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.text,
+              decoration: InputDecoration(labelText: 'Username'),
             ),
-            SizedBox(height: 16), // Add space between fields
             TextField(
               controller: _passwordController,
-              decoration: InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
+              decoration: InputDecoration(labelText: 'Password'),
               obscureText: true,
-              keyboardType: TextInputType.text,
             ),
-            SizedBox(height: 16), // Add space between fields
-            TextField(
-              controller: _confirmPasswordController,
-              decoration: InputDecoration(
-                labelText: "Confirm Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-              keyboardType: TextInputType.text,
-            ),
-            SizedBox(height: 20), // Add space before button
+            SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                String username = _usernameController.text.trim();
-                String password = _passwordController.text.trim();
-                String confirmPassword = _confirmPasswordController.text.trim();
-                String smsCode = _otpController.text.trim();
-
-                if (isValidUsername(username) && isValidPassword(password)) {
-                  if (password == confirmPassword) {
-                    _authController.signInWithPhoneNumber(
-                      verificationId: widget.verificationId,
-                      smsCode: smsCode,
-                      phoneNumber: widget.phoneNumber,
-                      name: _nameController.text.trim(),
-                      username: username,
-                      password: password,
-                      context: context,
-                    );
-                  } else {
-                    _showErrorDialog(context, 'Passwords do not match.');
-                  }
-                } else {
-                  String errorMessage = '';
-                  if (!isValidUsername(username)) {
-                    errorMessage +=
-                        'Username must contain only English letters and numbers and be at least 6 characters long.\n';
-                  }
-                  if (!isValidPassword(password)) {
-                    errorMessage += 'Password must be at least 8 characters.';
-                  }
-                  _showErrorDialog(context, errorMessage);
-                }
+                _authController.verifyOTP(
+                  verificationId: widget.verificationId,
+                  smsCode: _otpController.text.trim(),
+                  phoneNumber: widget.phoneNumber,
+                  name: _nameController.text.trim(),
+                  username: _usernameController.text.trim(),
+                  password: _passwordController.text.trim(),
+                  context: context,
+                );
               },
-              child: Text("Verify OTP"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                minimumSize: Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              child: Text('Verify and Save'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showErrorDialog(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Error'),
-        content: Text(message),
-        actions: <Widget>[
-          TextButton(
-            child: Text('Okay'),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
-          ),
-        ],
       ),
     );
   }

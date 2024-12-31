@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class ChatScreen extends StatefulWidget {
   final String username;
@@ -27,7 +28,6 @@ class _ChatScreenState extends State<ChatScreen> {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // Clear the message input field
       _messageController.clear();
     }
   }
@@ -72,13 +72,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     var data = doc.data() as Map<String, dynamic>;
                     bool isMe = data['senderUsername'] == widget.username;
 
-                    // ตรวจสอบ timestamp ถ้ามีค่าเป็น null
+                    // Format timestamp
                     var timestamp = data['timestamp'] != null
-                        ? (data['timestamp'] as Timestamp)
-                            .toDate()
-                            .toLocal()
-                            .toString()
-                            .substring(11, 16)
+                        ? DateFormat('dd MMM yyyy HH:mm')
+                            .format((data['timestamp'] as Timestamp).toDate())
                         : 'Unknown time';
 
                     return Padding(

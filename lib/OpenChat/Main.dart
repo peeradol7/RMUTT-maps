@@ -29,7 +29,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 const SizedBox(height: 30),
                 const Text(
-                  "Login (Community)",
+                  "Login (OpenChat)",
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,

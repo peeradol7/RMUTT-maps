@@ -1,48 +1,70 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:maps/OpenChat/OTPVerification.dart';
 
 import '../ChatScreen.dart';
-import '../OTPVerification.dart';
 
 class AuthController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+  Future<void> saveUserData({
+    required String name,
+    required String username,
+    required String phoneNumber,
+    required String password,
+  }) async {
+    await FirebaseFirestore.instance.collection('users').add({
+      'name': name,
+      'username': username,
+      'phoneNumber': phoneNumber,
+      'password': password,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
 
   Future<void> sendOTP({
     required String phoneNumber,
     required BuildContext context,
   }) async {
-    // ตรวจสอบและแก้ไขเบอร์โทรศัพท์เป็น +66
+    print('Original phone number: $phoneNumber');
     if (phoneNumber.startsWith('0')) {
       phoneNumber = '+66' + phoneNumber.substring(1);
     } else if (!phoneNumber.startsWith('+66')) {
       phoneNumber = '+66' + phoneNumber;
     }
+    print('Formatted phone number: $phoneNumber');
 
-    // เช็คว่าหมายเลขโทรศัพท์มีใน Firestore หรือไม่
     try {
       final QuerySnapshot result = await firestore
           .collection('usersRMUTT')
           .where('phoneNumber', isEqualTo: phoneNumber)
           .limit(1)
           .get();
+      print('Firebase Auth instance: ${FirebaseAuth.instance}');
 
-      final List<DocumentSnapshot> documents = result.docs;
-      if (documents.isNotEmpty) {
-        // ถ้ามีหมายเลขโทรศัพท์นี้อยู่แล้ว ให้แสดงข้อความเตือน
+      if (result.docs.isNotEmpty) {
         _showErrorDialog(context, 'คุณได้สมัครสมาชิกไปแล้ว.');
         return;
       }
 
-      // ถ้าไม่มีหมายเลขโทรศัพท์นี้ใน Firestore ก็ส่ง OTP
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phoneNumber,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          // Auto-sign-in, can be ignored in this context
-        },
+        verificationCompleted: (PhoneAuthCredential credential) async {},
         verificationFailed: (FirebaseAuthException e) {
-          print('Verification failed: ${e.message}');
+          String errorMessage = 'เกิดข้อผิดพลาดในการส่ง OTP';
+
+          if (e.code == 'too-many-requests') {
+            errorMessage =
+                'มีการขอ OTP บ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
+          } else if (e.message?.contains('BILLING_NOT_ENABLED') ?? false) {
+            errorMessage = 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
+          }
+
+          print('Verification failed: ${e.code}');
+          print('Error message: ${e.message}');
+          _showErrorDialog(context, errorMessage);
         },
         codeSent: (String verificationId, int? resendToken) {
           Navigator.of(context).push(
@@ -60,29 +82,12 @@ class AuthController {
       );
     } catch (e) {
       print('Error checking phone number: $e');
-      _showError(context, 'เกิดข้อผิดพลาดในการตรวจสอบหมายเลขโทรศัพท์');
+      print('Firebase initialization error: $e');
+      _showErrorDialog(context, 'เกิดข้อผิดพลาดในการตรวจสอบหมายเลขโทรศัพท์');
     }
   }
 
-  void _showError(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Error'),
-        content: Text(message),
-        actions: <Widget>[
-          TextButton(
-            child: Text('Okay'),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> signInWithPhoneNumber({
+  Future<void> verifyOTP({
     required String verificationId,
     required String smsCode,
     required String phoneNumber,
@@ -91,30 +96,26 @@ class AuthController {
     required String password,
     required BuildContext context,
   }) async {
-    PhoneAuthCredential credential = PhoneAuthProvider.credential(
-      verificationId: verificationId,
-      smsCode: smsCode,
-    );
-
     try {
+      PhoneAuthCredential credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+
       UserCredential userCredential =
           await _auth.signInWithCredential(credential);
 
-      // Check if the username already exists
-      QuerySnapshot usernameSnapshot = await FirebaseFirestore.instance
+      QuerySnapshot usernameSnapshot = await firestore
           .collection('usersRMUTT')
           .where('username', isEqualTo: username)
           .get();
 
       if (usernameSnapshot.docs.isNotEmpty) {
-        // Username already exists
-        _showErrorDialog(
-            context, 'Username already exists. Please choose another one.');
+        _showErrorDialog(context, 'Username already exists.');
         return;
       }
 
-      // Save user data to Firestore
-      await FirebaseFirestore.instance
+      await firestore
           .collection('usersRMUTT')
           .doc(userCredential.user!.uid)
           .set({
@@ -122,9 +123,9 @@ class AuthController {
         'name': name,
         'username': username,
         'password': password,
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // Navigate to ChatScreen with username and name
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => ChatScreen(
@@ -134,9 +135,8 @@ class AuthController {
         ),
       );
     } catch (e) {
-      print('Error during sign-in: $e');
-      _showErrorDialog(
-          context, 'An error occurred during sign-in. Please try again.');
+      print('Error verifying OTP: $e');
+      _showErrorDialog(context, 'OTP Verification failed.');
     }
   }
 
@@ -146,7 +146,7 @@ class AuthController {
       builder: (ctx) => AlertDialog(
         title: Text('Error'),
         content: Text(message),
-        actions: <Widget>[
+        actions: [
           TextButton(
             child: Text('Okay'),
             onPressed: () {
