@@ -1,73 +1,106 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:maps/OpenChat/UserInfoScreen.dart';
 
-import 'Controller/auth_controller.dart';
-
-class OTPVerificationScreen extends StatefulWidget {
-  final String verificationId;
+class VerificationOTPScreen extends StatefulWidget {
   final String phoneNumber;
-
-  OTPVerificationScreen({
-    required this.verificationId,
-    required this.phoneNumber,
-  });
+  const VerificationOTPScreen({required this.phoneNumber});
 
   @override
-  _OTPVerificationScreenState createState() => _OTPVerificationScreenState();
+  _VerificationOTPScreenState createState() => _VerificationOTPScreenState();
 }
 
-class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
+class _VerificationOTPScreenState extends State<VerificationOTPScreen> {
   final TextEditingController _otpController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final AuthController _authController = AuthController();
+
+  Future<void> verifyOTP(String otp) async {
+    final url = Uri.parse('https://console.sms-kub.com/api/v2/otp/verify');
+    final headers = {
+      'Key': 'Key',
+      'Value': 'thjF6P1TOF5k5zQrTGl7kNs7fFgY03IC',
+      'Content-Type': 'application/json',
+    };
+    final body = jsonEncode({
+      'otp': otp,
+      'phone': widget.phoneNumber,
+      'project': '668cc35202f3a7634f532266',
+    });
+
+    try {
+      final response = await http.post(url, headers: headers, body: body);
+      final responseData = jsonDecode(response.body);
+      if (response.statusCode == 200 &&
+          responseData['data']['validate'] == true) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                UserInfoScreen(phoneNumber: widget.phoneNumber),
+          ),
+          (route) => false,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid OTP. Please try again.')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('An error occurred: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[200],
       appBar: AppBar(
-        title: Text('Verify OTP'),
-        backgroundColor: Colors.teal,
+        title: Text("Verify OTP"),
+        backgroundColor: const Color.fromARGB(255, 4, 42, 73),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _otpController,
-              decoration: InputDecoration(labelText: 'Enter OTP'),
-              keyboardType: TextInputType.number,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _otpController,
+                  decoration: InputDecoration(
+                    labelText: "Enter OTP",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    prefixIcon: Icon(Icons.lock, color: Colors.teal),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => verifyOTP(_otpController.text.trim()),
+                  child: Text(
+                    "Verify OTP",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromARGB(255, 4, 42, 73),
+                    minimumSize: Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            TextField(
-              controller: _nameController,
-              decoration: InputDecoration(labelText: 'Name'),
-            ),
-            TextField(
-              controller: _usernameController,
-              decoration: InputDecoration(labelText: 'Username'),
-            ),
-            TextField(
-              controller: _passwordController,
-              decoration: InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                _authController.verifyOTP(
-                  verificationId: widget.verificationId,
-                  smsCode: _otpController.text.trim(),
-                  phoneNumber: widget.phoneNumber,
-                  name: _nameController.text.trim(),
-                  username: _usernameController.text.trim(),
-                  password: _passwordController.text.trim(),
-                  context: context,
-                );
-              },
-              child: Text('Verify and Save'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-            ),
-          ],
+          ),
         ),
       ),
     );

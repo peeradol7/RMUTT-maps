@@ -80,9 +80,10 @@ flutter:
   assets:
     - assets/svg/
     - assets/
+    - assets/iconCategory/
     - assets/Userlocation.png
-    - assets/logotoilet.png
-    - assets/Route.json
+    - assets/7-11.png
+    - assets/iconCategory/atm.png
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

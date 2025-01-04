@@ -1,6 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
-import 'Controller/auth_controller.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String phoneNumber;
@@ -18,14 +17,37 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
-  final AuthController _authController = AuthController();
-
   bool isValidUsername(String username) {
     return RegExp(r'^[a-zA-Z0-9]{6,}$').hasMatch(username);
   }
 
   bool isValidPassword(String password) {
     return RegExp(r'^[a-zA-Z0-9]{8,}$').hasMatch(password);
+  }
+
+  Future<void> saveUserData({
+    required String name,
+    required String username,
+    required String phoneNumber,
+    required String password,
+  }) async {
+    try {
+      final userCollection = FirebaseFirestore.instance.collection('users');
+      await userCollection.doc(phoneNumber).set({
+        'name': name,
+        'username': username,
+        'phoneNumber': phoneNumber,
+        'password':
+            password, // Ensure passwords are hashed in real applications
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('User data saved successfully!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save user data: $e')),
+      );
+    }
   }
 
   @override
@@ -85,7 +107,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
                 if (isValidUsername(username) && isValidPassword(password)) {
                   if (password == confirmPassword) {
-                    await _authController.saveUserData(
+                    await saveUserData(
                       name: name,
                       username: username,
                       phoneNumber: widget.phoneNumber,

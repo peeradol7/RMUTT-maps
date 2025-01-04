@@ -78,9 +78,21 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor _markerIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _toilet = BitmapDescriptor.defaultMarker;
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _parkingIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _foodIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _classroomIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _serviceIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _libraryIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _atmIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _canteenIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _sportIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _seven = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
   final MarkerController _markerController = MarkerController();
   String _destination = '';
+  List<Marker> _markers = [];
+  List<Map<String, dynamic>> _steps = [];
+  double _travelDuration = 0.0;
   StreamSubscription<Position>? _locationSubscription;
 
   @override
@@ -88,25 +100,170 @@ class MapSampleState extends State<MapSample> {
     super.initState();
     _panelController = PanelController();
     _setMarkerIcon();
+    _initializeIcons();
+  }
+
+  Future<void> _initializeIcons() async {
+    _seven = await getResizedMarker('assets/iconCategory/seven.png', 125, 125);
+    _atmIcon = await getResizedMarker('assets/iconCategory/atm.png', 125, 125);
+    // _libraryIcon = await getResizedMarker('assets/iconCategory/Libra.png', width, height)
+  }
+
+  Future<BitmapDescriptor> getResizedMarker(
+      String assetPath, int width, int height) async {
+    ByteData data = await rootBundle.load(assetPath);
+    ui.Codec codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: width,
+      targetHeight: height,
+    );
+    ui.FrameInfo frameInfo = await codec.getNextFrame();
+    ByteData? resizedImage =
+        await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(resizedImage!.buffer.asUint8List());
+  }
+
+  void _showCategoryLocations(String locationType) async {
+    setState(() {
+      _markerController.clearMarkers(exceptId: 'currentLocation');
+    });
+
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('rmuttlocations')
+          .where('type', isEqualTo: locationType)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('ไม่พบข้อมูลสถานที่ประเภท $locationType')));
+        return;
+      }
+
+      for (var i = 0; i < snapshot.docs.length; i++) {
+        var doc = snapshot.docs[i];
+        var data = doc.data();
+
+        if (data.containsKey('latitude') &&
+            data.containsKey('longitude') &&
+            data.containsKey('namelocation')) {
+          LatLng position = LatLng(data['latitude'], data['longitude']);
+
+          BitmapDescriptor markerIcon;
+          switch (locationType) {
+            case 'ห้องน้ำ':
+              markerIcon = _toilet;
+              break;
+            case 'จุดขายอาหารและเครื่องดื่ม':
+              markerIcon = _foodIcon;
+              break;
+            case 'ห้องเรียน':
+              markerIcon = _classroomIcon;
+              break;
+            case 'จุดบริการของมหาลัย':
+              markerIcon = _serviceIcon;
+              break;
+            case 'ห้องสมุด':
+              markerIcon = _libraryIcon;
+              break;
+            case 'ATM':
+              markerIcon = _atmIcon;
+              break;
+            case 'โรงอาหาร':
+              markerIcon = _canteenIcon;
+              break;
+            case 'สนามกีฬา':
+              markerIcon = _sportIcon;
+              break;
+            case 'ลานจอดรถ':
+              markerIcon = _parkingIcon;
+              break;
+            case 'เซเว่น':
+              markerIcon = _seven;
+              break;
+            default:
+              markerIcon = BitmapDescriptor.defaultMarker;
+          }
+
+          setState(() {
+            _markerController.addMarker(
+              id: '${locationType}_${doc.id}',
+              position: position,
+              title: data['namelocation'],
+              icon: markerIcon,
+              onTap: (LatLng tappedPosition) {
+                _onMarkerTap(tappedPosition, data['namelocation']);
+              },
+            );
+          });
+        }
+        print('Seven Icon initialized: ${_seven != null}');
+        print('ATM Icon initialized: ${_atmIcon != null}');
+      }
+
+      var firstDoc = snapshot.docs.first.data();
+      var firstPosition = LatLng(firstDoc['latitude'], firstDoc['longitude']);
+
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(CameraUpdate.newLatLngZoom(firstPosition, 16));
+    } catch (e) {
+      print('Error loading $locationType locations: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ไม่สามารถโหลดข้อมูล $locationType ได้')));
+    }
   }
 
   Future<Uint8List> getBytesFromAsset(String path, int width) async {
-    ByteData? data = await rootBundle.load(path);
-    ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(),
-        targetWidth: width);
-    ui.FrameInfo fi = await codec.getNextFrame();
-    return (await fi.image.toByteData(format: ui.ImageByteFormat.png))!
-        .buffer
-        .asUint8List();
+    try {
+      ByteData? data = await rootBundle.load(path);
+      print('Successfully loaded asset: $path');
+      ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(),
+          targetWidth: width);
+      ui.FrameInfo fi = await codec.getNextFrame();
+      return (await fi.image.toByteData(format: ui.ImageByteFormat.png))!
+          .buffer
+          .asUint8List();
+    } catch (e) {
+      print('Error loading asset $path: $e');
+      throw e;
+    }
   }
 
   Future<void> _setMarkerIcon() async {
     final Uint8List markerIcon =
-        await getBytesFromAsset('assets/Userlocation.png', 100);
+        await getBytesFromAsset('assets/Userlocation.png', 125);
     _markerIcon = BitmapDescriptor.fromBytes(markerIcon);
+
     final Uint8List toiletIcon =
-        await getBytesFromAsset('assets/toilet1.png', 100);
+        await getBytesFromAsset('assets/iconCategory/toilet1.png', 125);
     _toilet = BitmapDescriptor.fromBytes(toiletIcon);
+
+    final Uint8List parkingIcon =
+        await getBytesFromAsset('assets/iconCategory/parking.png', 110);
+    _parkingIcon = BitmapDescriptor.fromBytes(parkingIcon);
+
+    final Uint8List foodIcon =
+        await getBytesFromAsset('assets/iconCategory/foodDrink.png', 125);
+    _foodIcon = BitmapDescriptor.fromBytes(foodIcon);
+
+    final Uint8List classroomIcon =
+        await getBytesFromAsset('assets/iconCategory/classroom.png', 100);
+    _classroomIcon = BitmapDescriptor.fromBytes(classroomIcon);
+
+    final Uint8List serviceIcon =
+        await getBytesFromAsset('assets/iconCategory/Service.png', 150);
+    _serviceIcon = BitmapDescriptor.fromBytes(serviceIcon);
+
+    final Uint8List libraryIcon =
+        await getBytesFromAsset('assets/iconCategory/Libra.png', 125);
+    _libraryIcon = BitmapDescriptor.fromBytes(libraryIcon);
+    final Uint8List canteenIcon =
+        await getBytesFromAsset('assets/iconCategory/canteen.png', 125);
+    _canteenIcon = BitmapDescriptor.fromBytes(canteenIcon);
+
+    final Uint8List sportIcon =
+        await getBytesFromAsset('assets/iconCategory/sport.png', 125);
+    _sportIcon = BitmapDescriptor.fromBytes(sportIcon);
   }
 
   @override
@@ -165,19 +322,20 @@ class MapSampleState extends State<MapSample> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.clear),
-            onPressed: () {
-              setState(() {
-                _searchController.clear(); // ล้างค่าในช่องค้นหา
-                _searchText = ''; // เคลียร์ข้อความที่ใช้ในการค้นหา
-              });
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.gps_fixed),
-            onPressed: showUserLocation,
-          ),
+          if (_searchController.text.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.clear),
+              onPressed: () {
+                setState(() {
+                  _searchController.clear();
+                  _searchText = '';
+                });
+              },
+            ),
+          // IconButton(
+          //   icon: Icon(Icons.gps_fixed),
+          //   onPressed: showUserLocation,
+          // ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -204,16 +362,11 @@ class MapSampleState extends State<MapSample> {
         children: [
           GoogleMap(
             mapType: MapType.normal,
-            markers: Set<Marker>.from(_markerController.markers)
-              ..addAll([
-                if (_currentPosition != null)
-                  Marker(
-                    markerId: MarkerId('currentLocation'),
-                    position: _currentPosition!,
-                    icon: _markerIcon,
-                  ),
-              ]),
+            markers: Set<Marker>.from(
+                _markerController.markers), // คงการใช้งาน markers อื่นๆ หากมี
             indoorViewEnabled: true,
+            myLocationButtonEnabled: true, // แสดงปุ่มตำแหน่งปัจจุบัน
+            myLocationEnabled: true, // แสดงตำแหน่งปัจจุบันบนแผนที่
             initialCameraPosition: university,
             polylines: _polylines,
             trafficEnabled: true,
@@ -231,17 +384,17 @@ class MapSampleState extends State<MapSample> {
               borderRadius: BorderRadius.vertical(top: Radius.circular(19.0)),
               panel: Column(
                 children: [
-                  // Expanded(
-                  //   child: Center(
-                  //     child: Text(
-                  //       'เวลาในการเดินทางโดยประมาณ : ${_travelDuration.toStringAsFixed(2)} นาที',
-                  //       style: TextStyle(
-                  //         fontSize: 19,
-                  //         color: Color.fromARGB(255, 0, 0, 0),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'เวลาในการเดินทางโดยประมาณ : ${_travelDuration.toStringAsFixed(2)} นาที',
+                        style: TextStyle(
+                          fontSize: 19,
+                          color: Color.fromARGB(255, 0, 0, 0),
+                        ),
+                      ),
+                    ),
+                  ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -434,15 +587,11 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  List<Marker> _markers = [];
-  List<Map<String, dynamic>> _steps = [];
-
-  double _travelDuration = 0.0;
-
   Future<void> showUserLocation() async {
     try {
       Position currentPosition = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
       setState(() {
         _currentPosition = LatLng(
@@ -458,9 +607,10 @@ class MapSampleState extends State<MapSample> {
       StreamSubscription<Position> positionStream =
           Geolocator.getPositionStream(
         locationSettings: LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 1,
-            timeLimit: Duration(seconds: 1)),
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 1,
+          timeLimit: Duration(seconds: 1),
+        ),
       ).listen((Position position) {
         setState(() {
           _currentPosition = LatLng(position.latitude, position.longitude);
@@ -672,47 +822,86 @@ class MapSampleState extends State<MapSample> {
                     height: 24,
                   ),
                   title: Text('ห้องน้ำ'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('ห้องน้ำ');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.food_bank),
                   title: Text('จุดขายอาหารและเครื่องดื่ม'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('จุดขายอาหารและเครื่องดื่ม');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.class_),
                   title: Text('ห้องเรียน'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('ห้องเรียน');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.room_service),
                   title: Text('จุดบริการของมหาลัย'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('จุดบริการของมหาลัย');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.library_books),
                   title: Text('ห้องสมุด'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('ห้องสมุด');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.atm),
                   title: Text('ตู้ ATM'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('ATM');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.restaurant),
                   title: Text('โรงอาหาร'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('โรงอาหาร');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.sports_soccer),
                   title: Text('สนามกีฬา'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('สนามกีฬา');
+                  },
                 ),
                 ListTile(
                   leading: Icon(Icons.local_parking),
                   title: Text('ลานจอดรถ'),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('ลานจอดรถ');
+                  },
+                ),
+                ListTile(
+                  leading: Image.asset(
+                    'assets/7-11.png',
+                    width: 24,
+                    height: 24,
+                  ),
+                  title: Text('7-11'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('เซเว่น');
+                  },
                 ),
               ],
             ),

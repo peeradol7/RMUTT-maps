@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:maps/OpenChat/SendOTP.dart';
 
 import 'Login.dart';
-import 'register.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -86,7 +86,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => RegisterScreen(),
+                            builder: (context) => SendOTPScreen(),
                           ),
                         );
                       },

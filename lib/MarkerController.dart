@@ -1,10 +1,9 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MarkerController {
-  final Set<Marker> _markers = {};
+  final List<Marker> _markers = [];
 
-  Set<Marker> get markers => _markers;
-
+  List<Marker> get markers => List.unmodifiable(_markers);
   void addMarker({
     required String id,
     required LatLng position,
@@ -12,6 +11,9 @@ class MarkerController {
     required BitmapDescriptor icon,
     required Function(LatLng) onTap,
   }) {
+    _markers.removeWhere((marker) => marker.markerId.value == id);
+
+    // เพิ่มมาร์คเกอร์ใหม่
     _markers.add(
       Marker(
         markerId: MarkerId(id),
