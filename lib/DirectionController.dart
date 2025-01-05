@@ -9,7 +9,8 @@ class DirectionController {
   DirectionController({required this.onRouteFetched});
 
   Future<void> fetchAndCalculateRoutes(LatLng start, LatLng end) async {
-    final url = Uri.parse('http://192.168.1.38:5000/find-path');
+    final url =
+        Uri.parse('https://dijkstarapi-production.up.railway.app/find-path');
     final requestBody = {
       "start": [start.longitude, start.latitude],
       "end": [end.longitude, end.latitude]
