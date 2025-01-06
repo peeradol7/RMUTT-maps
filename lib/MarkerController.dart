@@ -4,6 +4,7 @@ class MarkerController {
   final List<Marker> _markers = [];
 
   List<Marker> get markers => List.unmodifiable(_markers);
+
   void addMarker({
     required String id,
     required LatLng position,
@@ -13,7 +14,6 @@ class MarkerController {
   }) {
     _markers.removeWhere((marker) => marker.markerId.value == id);
 
-    // เพิ่มมาร์คเกอร์ใหม่
     _markers.add(
       Marker(
         markerId: MarkerId(id),
@@ -23,6 +23,34 @@ class MarkerController {
         onTap: () => onTap(position),
       ),
     );
+  }
+
+  void updateMarker({
+    required String id,
+    required LatLng position,
+    String? title,
+    BitmapDescriptor? icon,
+    Function(LatLng)? onTap,
+  }) {
+    // หาดัชนีของมาร์คเกอร์ที่ต้องการอัพเดท
+    final index = _markers.indexWhere((marker) => marker.markerId.value == id);
+
+    if (index != -1) {
+      // ดึงมาร์คเกอร์เดิม
+      final oldMarker = _markers[index];
+
+      // สร้างมาร์คเกอร์ใหม่โดยรักษาค่าเดิมที่ไม่ได้อัพเดท
+      _markers[index] = Marker(
+        markerId: MarkerId(id),
+        position: position,
+        infoWindow:
+            title != null ? InfoWindow(title: title) : oldMarker.infoWindow,
+        icon: icon ?? oldMarker.icon,
+        onTap: onTap != null
+            ? () => onTap(position)
+            : oldMarker.onTap as void Function()?,
+      );
+    }
   }
 
   void clearMarkers({String? exceptId}) {

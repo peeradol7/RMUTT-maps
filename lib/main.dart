@@ -101,6 +101,7 @@ class MapSampleState extends State<MapSample> {
     _panelController = PanelController();
     _setMarkerIcon();
     _initializeIcons();
+    _requestLocationPermission();
   }
 
   Future<void> _initializeIcons() async {
@@ -332,10 +333,16 @@ class MapSampleState extends State<MapSample> {
                 });
               },
             ),
-          // IconButton(
-          //   icon: Icon(Icons.gps_fixed),
-          //   onPressed: showUserLocation,
-          // ),
+          IconButton(
+            icon: Icon(Icons.gps_fixed),
+            onPressed: () {
+              if (_locationSubscription == null) {
+                startTrackingLocation();
+              } else {
+                stopTrackingLocation();
+              }
+            },
+          ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -361,12 +368,16 @@ class MapSampleState extends State<MapSample> {
       body: Stack(
         children: [
           GoogleMap(
-            mapType: MapType.normal,
-            markers: Set<Marker>.from(
-                _markerController.markers), // คงการใช้งาน markers อื่นๆ หากมี
+            mapType: MapType.satellite,
+            markers: Set<Marker>.from(_markerController.markers)
+              ..addAll([
+                if (_currentPosition != null)
+                  Marker(
+                      markerId: MarkerId('currentLocation'),
+                      position: _currentPosition!,
+                      icon: _markerIcon),
+              ]),
             indoorViewEnabled: true,
-            myLocationButtonEnabled: true, // แสดงปุ่มตำแหน่งปัจจุบัน
-            myLocationEnabled: true, // แสดงตำแหน่งปัจจุบันบนแผนที่
             initialCameraPosition: university,
             polylines: _polylines,
             trafficEnabled: true,
@@ -587,6 +598,30 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+  Future<void> _requestLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return Future.error('Location services are disabled.');
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return Future.error('Location permissions are denied');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      return Future.error(
+          'Location permissions are permanently denied, we cannot request permissions.');
+    }
+
+    showUserLocation();
+  }
+
   Future<void> showUserLocation() async {
     try {
       Position currentPosition = await Geolocator.getCurrentPosition(
@@ -630,38 +665,53 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-  int _findNextUnreachedStep(LatLng currentPosition) {
-    final double stepThreshold = 5.0;
+  void _updateRouteProgress(LatLng currentPosition, LatLng destination) {
+    if (_steps.isEmpty || _polylineCoordinates.isEmpty) {
+      print('DEBUG: Steps or polyline coordinates are empty');
+      return;
+    }
+
+    final double passThreshold = 20.0;
+    final double arrivalThreshold = 10.0; // ระยะห่างที่ถือว่าถึงจุดหมาย
+
+    // หาจุดที่ใกล้ที่สุดและยังไม่ผ่าน
+    int nearestUnpassedIndex = -1;
+    double minDistance = double.infinity;
 
     for (int i = 0; i < _steps.length; i++) {
-      final stepPoint = _steps[i]['point'] as LatLng;
+      if (_steps[i]['passed'] == true) {
+        continue;
+      }
 
-      double distanceToStep = Geolocator.distanceBetween(
+      LatLng stepPoint = _steps[i]['point'];
+      double distance = Geolocator.distanceBetween(
         currentPosition.latitude,
         currentPosition.longitude,
         stepPoint.latitude,
         stepPoint.longitude,
       );
 
-      if (distanceToStep > stepThreshold) {
-        return i;
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestUnpassedIndex = i;
       }
     }
 
-    return _steps.length - 1;
-  }
+    if (nearestUnpassedIndex != -1 && minDistance <= passThreshold) {
+      setState(() {
+        for (int i = 0; i <= nearestUnpassedIndex; i++) {
+          _steps[i]['passed'] = true;
+        }
 
-  void _updateRouteProgress(LatLng currentPosition, LatLng destination) {
-    if (_steps.isEmpty || _polylineCoordinates.isEmpty) return;
+        int polylineIndex =
+            _findCorrespondingPolylineIndex(nearestUnpassedIndex);
+        _polylineCoordinates = _polylineCoordinates.sublist(polylineIndex);
 
-    int nextStepIndex = _findNextUnreachedStep(currentPosition);
-    setState(() {
-      if (nextStepIndex > 0 && nextStepIndex < _polylineCoordinates.length) {
-        _polylineCoordinates = _polylineCoordinates.sublist(nextStepIndex);
         _updatePolyline();
-      }
-    });
+      });
+    }
 
+    // เช็คระยะทางถึงจุดหมายและจำนวน polyline points
     double distanceToDestination = Geolocator.distanceBetween(
       currentPosition.latitude,
       currentPosition.longitude,
@@ -669,10 +719,43 @@ class MapSampleState extends State<MapSample> {
       destination.longitude,
     );
 
-    if (distanceToDestination <= 50 && !_hasShownArrivalDialog) {
+    // เพิ่มเงื่อนไขเช็ค polyline
+    bool isNearDestination = distanceToDestination <= arrivalThreshold;
+    bool isPolylineEmpty =
+        _polylineCoordinates.length <= 2; // เหลือแค่จุดเริ่มต้นและจุดสุดท้าย
+
+    if ((isNearDestination || isPolylineEmpty) && !_hasShownArrivalDialog) {
       _showArrivalDialog();
       _hasShownArrivalDialog = true;
+
+      // หยุดการติดตามตำแหน่ง (optional)
+      stopTrackingLocation();
     }
+  }
+
+  int _findCorrespondingPolylineIndex(int stepIndex) {
+    if (stepIndex >= _steps.length || _steps.isEmpty) return 0;
+
+    LatLng stepPoint = _steps[stepIndex]['point'];
+    int closestIndex = 0;
+    double minDistance = double.infinity;
+
+    // หาจุดใน polyline coordinates ที่ใกล้ที่สุดกับ step point
+    for (int i = 0; i < _polylineCoordinates.length; i++) {
+      double distance = Geolocator.distanceBetween(
+        stepPoint.latitude,
+        stepPoint.longitude,
+        _polylineCoordinates[i].latitude,
+        _polylineCoordinates[i].longitude,
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = i;
+      }
+    }
+
+    return closestIndex;
   }
 
   void _updatePolyline() {
@@ -684,33 +767,6 @@ class MapSampleState extends State<MapSample> {
         color: Colors.blue,
         width: 5,
       ),
-    );
-  }
-
-  void _showArrivalDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('ถึงจุดหมายแล้ว'),
-          content: Text('คุณได้เดินทางมาถึงจุดหมายเรียบร้อยแล้ว'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                // Clear the route after arrival
-                setState(() {
-                  _polylines.clear();
-                  _polylineCoordinates.clear();
-                  _steps.clear();
-                });
-              },
-              child: Text('ตกลง'),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -745,6 +801,37 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
+  void startTrackingLocation() {
+    _locationSubscription = Geolocator.getPositionStream(
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5, // อัปเดตทุกระยะ 5 เมตร
+      ),
+    ).listen((Position position) {
+      setState(() {
+        _currentPosition = LatLng(position.latitude, position.longitude);
+      });
+
+      if (!_cameraMoved) {
+        _moveCameraToPosition(_currentPosition!);
+        _cameraMoved = true;
+      }
+
+      if (_destinationLatLng != null) {
+        _updateRouteProgress(_currentPosition!, _destinationLatLng!);
+      }
+    });
+  }
+
+  void stopTrackingLocation() {
+    _locationSubscription?.cancel();
+  }
+
+  void _moveCameraToPosition(LatLng position) async {
+    final controller = await _controller.future;
+    controller.animateCamera(CameraUpdate.newLatLngZoom(position, 18));
+  }
+
   void _onMarkerTap(LatLng endLocation, String destination) {
     if (_isLoadingRoute) return;
     showDialog(
@@ -777,30 +864,44 @@ class MapSampleState extends State<MapSample> {
   }
 
   void _addPolyline(List<LatLng> polylineCoordinates) {
-    _polylineCoordinates = polylineCoordinates; // Fixed variable name
+    _polylineCoordinates = polylineCoordinates;
     _updatePolyline();
-    final String polylineIdVal =
-        'polyline_id_${DateTime.now().millisecondsSinceEpoch}';
 
-    setState(() {
-      _polylines.add(Polyline(
-        polylineId: PolylineId(polylineIdVal),
-        width: 5,
-        color: Colors.blue,
-        points: polylineCoordinates,
-      ));
-    });
+    // สร้าง steps จากพิกัดทั้งหมด
+    _steps = List<Map<String, dynamic>>.generate(
+      polylineCoordinates.length,
+      (index) => {
+        'point': polylineCoordinates[index],
+        'index': index,
+      },
+    );
+  }
 
-    // Add to route coordinates
-    setState(() {
-      _routeCoordinates.addAll(polylineCoordinates);
-      _polylines.add(Polyline(
-        polylineId: PolylineId('route'),
-        points: _routeCoordinates,
-        color: Colors.blue,
-        width: 5,
-      ));
-    });
+  void _showArrivalDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('ถึงจุดหมายแล้ว'),
+          content: Text('คุณได้เดินทางมาถึงจุดหมายเรียบร้อยแล้ว'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Clear the route after arrival
+                setState(() {
+                  _polylines.clear();
+                  _polylineCoordinates.clear();
+                  _steps.clear();
+                });
+              },
+              child: Text('ตกลง'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showMenu() {
