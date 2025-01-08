@@ -390,22 +390,22 @@ class MapSampleState extends State<MapSample> {
           if (_polylines.isNotEmpty)
             SlidingUpPanel(
               controller: _panelController,
-              maxHeight: 100.0,
+              maxHeight: 60.0,
               color: Color.fromARGB(255, 255, 255, 255),
               borderRadius: BorderRadius.vertical(top: Radius.circular(19.0)),
               panel: Column(
                 children: [
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        'เวลาในการเดินทางโดยประมาณ : ${_travelDuration.toStringAsFixed(2)} นาที',
-                        style: TextStyle(
-                          fontSize: 19,
-                          color: Color.fromARGB(255, 0, 0, 0),
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Expanded(
+                  //   child: Center(
+                  //     child: Text(
+                  //       'เวลาในการเดินทางโดยประมาณ : ${_travelDuration.toStringAsFixed(2)} นาที',
+                  //       style: TextStyle(
+                  //         fontSize: 19,
+                  //         color: Color.fromARGB(255, 0, 0, 0),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -642,9 +642,9 @@ class MapSampleState extends State<MapSample> {
       StreamSubscription<Position> positionStream =
           Geolocator.getPositionStream(
         locationSettings: LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.best,
           distanceFilter: 1,
-          timeLimit: Duration(seconds: 1),
+          timeLimit: Duration(seconds: 0),
         ),
       ).listen((Position position) {
         setState(() {
@@ -671,10 +671,9 @@ class MapSampleState extends State<MapSample> {
       return;
     }
 
-    final double passThreshold = 20.0;
-    final double arrivalThreshold = 10.0; // ระยะห่างที่ถือว่าถึงจุดหมาย
+    final double passThreshold = 35.0;
+    final double arrivalThreshold = 10.0;
 
-    // หาจุดที่ใกล้ที่สุดและยังไม่ผ่าน
     int nearestUnpassedIndex = -1;
     double minDistance = double.infinity;
 
