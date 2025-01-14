@@ -1,5 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:maps/OpenChat/SendOTP.dart';
+import 'package:maps/OpenChat/ChatScreen.dart';
+import 'package:maps/OpenChat/InputPhoneNumber.dart';
+import 'package:maps/OpenChat/model/usermodel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'Login.dart';
 
@@ -11,6 +16,28 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _checkIfLoggedIn();
+  }
+
+  _checkIfLoggedIn() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool? isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+
+    if (isLoggedIn) {
+      String? userJson = prefs.getString('user');
+      if (userJson != null) {
+        UserModel user = UserModel.fromFirestore(jsonDecode(userJson));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => ChatScreen(user: user)),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

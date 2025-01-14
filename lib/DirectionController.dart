@@ -5,8 +5,12 @@ import 'package:http/http.dart' as http;
 
 class DirectionController {
   final Function(List<LatLng>, List<Map<String, dynamic>>) onRouteFetched;
+  final Function() onArrivalDetected; // Add new callback for arrival
 
-  DirectionController({required this.onRouteFetched});
+  DirectionController({
+    required this.onRouteFetched,
+    required this.onArrivalDetected, // Add to constructor
+  });
 
   Future<void> fetchAndCalculateRoutes(LatLng start, LatLng end) async {
     print('\n--- API Request Debug ---');
@@ -30,30 +34,41 @@ class DirectionController {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final path = data['path'] as List;
+        final totalDistance =
+            data['total_distance'] as double; // Extract total_distance
 
         print('Received path points: ${path.length}');
+        print('Total distance: $totalDistance');
 
         List<LatLng> polylineCoordinates = path.map((point) {
           return LatLng(point[1], point[0]);
         }).toList();
 
-        print('Generated polyline coordinates: ${polylineCoordinates.length}');
+        final int pointsPerStep = 3;
+        List<Map<String, dynamic>> steps = [];
 
-        final steps = List<Map<String, dynamic>>.generate(
-          path.length,
-          (index) {
-            final point = LatLng(path[index][1], path[index][0]);
-            print('Step $index: ${point.latitude}, ${point.longitude}');
-            return {
-              'point': point,
-              'index': index,
-              'passed': false, // เพิ่ม flag สำหรับติดตามสถานะ
-            };
-          },
-        );
+        for (int i = 0; i < polylineCoordinates.length; i += pointsPerStep) {
+          int endIndex = i + pointsPerStep > polylineCoordinates.length
+              ? polylineCoordinates.length
+              : i + pointsPerStep;
+
+          Map<String, dynamic> step = {
+            'point': polylineCoordinates[i],
+            'start_index': i,
+            'end_index': endIndex - 1,
+            'passed': false,
+            'coordinates': polylineCoordinates.sublist(i, endIndex),
+          };
+          steps.add(step);
+        }
 
         print('Generated steps: ${steps.length}');
         print('----------------------\n');
+
+        // Check if we've arrived (total_distance <= 0.085)
+        if (totalDistance <= 0.055) {
+          onArrivalDetected(); // Trigger arrival callback
+        }
 
         onRouteFetched(polylineCoordinates, steps);
       } else {

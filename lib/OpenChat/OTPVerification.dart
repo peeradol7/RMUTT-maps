@@ -37,7 +37,7 @@ class _VerificationOTPScreenState extends State<VerificationOTPScreen> {
           context,
           MaterialPageRoute(
             builder: (context) =>
-                UserInfoScreen(phoneNumber: widget.phoneNumber),
+                UserInfoScreen(/*phoneNumber: widget.phoneNumber*/),
           ),
           (route) => false,
         );

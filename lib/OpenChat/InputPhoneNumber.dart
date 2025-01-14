@@ -13,6 +13,7 @@ class _RegisterScreenState extends State<SendOTPScreen> {
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
   bool _isButtonDisabled = false;
+  bool _isCheckbox = false;
 
   Future<void> sendOTP(String phoneNumber) async {
     if (_isLoading) return;
@@ -31,22 +32,13 @@ class _RegisterScreenState extends State<SendOTPScreen> {
     });
 
     try {
-      print('Sending OTP request with body: $body');
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: body,
+      );
 
-      final response = await http
-          .post(
-            url,
-            headers: headers,
-            body: body,
-          )
-          .timeout(Duration(seconds: 30));
-
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
-      // ตรวจสอบสถานะการตอบกลับ
       if (response.statusCode == 200) {
-        // แสดงหน้าสำหรับยืนยัน OTP
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -55,25 +47,41 @@ class _RegisterScreenState extends State<SendOTPScreen> {
           ),
         );
       } else {
-        // แยกข้อความข้อผิดพลาดจาก Response
-        String errorMessage = 'Failed to send OTP. Please try again.';
-        try {
-          final errorData = json.decode(response.body);
-          errorMessage = errorData['message'] ?? errorMessage;
-        } catch (_) {}
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
+          SnackBar(content: Text('Failed to send OTP. Please try again.')),
         );
       }
     } catch (e) {
-      print('Error sending OTP: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Network error. Please check your connection.')),
       );
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  void _showAgreementDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("ข้อตกลงการขอข้อมูลส่วนตัว"),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  "คำชี้แจงเกี่ยวกับข้อมูลส่วนตัว\n\nในขั้นตอนการสมัครสมาชิก คุณจะต้องให้ข้อมูลบางประการเพื่อทำการลงทะเบียนในระบบ โดยข้อมูลที่เราขอจากคุณคือ เบอร์โทรศัพท์มือถือ เท่านั้น\n\nการใช้ข้อมูล\nข้อมูลเบอร์โทรศัพท์ของคุณจะถูกใช้เพียงเพื่อการยืนยันตัวตนและการส่งรหัส OTP (One Time Password) เพื่อให้คุณสามารถยืนยันการสมัครสมาชิกในระบบของเรา\n\nการรักษาความปลอดภัย\nเรามีมาตรการในการรักษาความปลอดภัยของข้อมูลส่วนตัวของคุณอย่างเข้มงวด โดยข้อมูลของคุณจะไม่ถูกเปิดเผยหรือใช้เพื่อวัตถุประสงค์อื่นใดโดยไม่ได้รับความยินยอมจากคุณ\n\nการยินยอม\nโดยการให้ข้อมูลเบอร์โทรศัพท์มือถือกับเรา คุณยอมรับว่าคุณได้อ่านและเข้าใจข้อตกลงนี้ และยินยอมให้เรานำข้อมูลดังกล่าวไปใช้ในการยืนยันตัวตนสำหรับการสมัครสมาชิกในระบบของเรา"),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("ปิด"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -99,6 +107,34 @@ class _RegisterScreenState extends State<SendOTPScreen> {
                   width: 150,
                 ),
                 SizedBox(height: 30),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Checkbox(
+                      value: _isCheckbox,
+                      onChanged: (value) {
+                        setState(() => _isCheckbox = value ?? false);
+                      },
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _showAgreementDialog,
+                        child: RichText(
+                          text: TextSpan(
+                            text: 'ยอมรับข้อตกลง ',
+                            style: TextStyle(color: Colors.black),
+                            children: [
+                              TextSpan(
+                                text: 'อ่านข้อตกลง',
+                                style: TextStyle(color: Colors.blue),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 TextField(
                   controller: _phoneController,
                   decoration: InputDecoration(
@@ -114,9 +150,8 @@ class _RegisterScreenState extends State<SendOTPScreen> {
                 ),
                 SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: (_isButtonDisabled || _isLoading)
-                      ? null
-                      : () async {
+                  onPressed: (_isCheckbox && !_isLoading && !_isButtonDisabled)
+                      ? () async {
                           setState(() => _isButtonDisabled = true);
                           await sendOTP(_phoneController.text.trim());
                           Future.delayed(Duration(seconds: 60), () {
@@ -124,7 +159,8 @@ class _RegisterScreenState extends State<SendOTPScreen> {
                               setState(() => _isButtonDisabled = false);
                             }
                           });
-                        },
+                        }
+                      : null,
                   child: _isLoading
                       ? SizedBox(
                           height: 20,

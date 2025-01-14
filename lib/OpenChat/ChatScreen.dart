@@ -1,12 +1,15 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:maps/OpenChat/model/usermodel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatScreen extends StatefulWidget {
-  final String username;
-  final String name;
+  final UserModel user;
 
-  ChatScreen({required this.username, required this.name});
+  ChatScreen({required this.user});
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
@@ -20,11 +23,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMessage() async {
     String message = _messageController.text.trim();
     if (message.isNotEmpty) {
-      // Add message to Firestore
       await _firestore.collection('chat').add({
         'message': message,
-        'senderName': widget.name,
-        'senderUsername': widget.username,
+        'senderName': widget.user.name,
+        'senderUsername': widget.user.username,
+        'senderPhoneNumber': widget.user.phoneNumber, // Add phoneNumber here
         'timestamp': FieldValue.serverTimestamp(),
       });
 
@@ -38,6 +41,98 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _showEditDialog() {
+    TextEditingController nameController =
+        TextEditingController(text: widget.user.name);
+    TextEditingController passwordController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("แก้ไขข้อมูล"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: "เปลี่ยนชื่อ",
+                ),
+              ),
+              SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                decoration: InputDecoration(
+                  labelText: "เปลี่ยนรหัสผ่าน",
+                ),
+                obscureText: true,
+              ),
+            ],
+          ),
+          actions: [
+            // Cancel button
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog without saving
+              },
+              child: Text("ยกเลิก"),
+            ),
+            // Save button
+            ElevatedButton(
+              onPressed: () async {
+                // Get the updated name and password
+                String updatedName = nameController.text.trim();
+                String updatedPassword = passwordController.text.trim();
+
+                if (updatedName.isNotEmpty && updatedPassword.isNotEmpty) {
+                  // Update the user object with new values
+                  UserModel updatedUser = UserModel(
+                    userId: widget.user.userId, // Retain the user ID
+                    username: widget.user.username,
+                    name: updatedName, // New name
+                    password: updatedPassword, // New password
+                    phoneNumber: widget.user.phoneNumber,
+                  );
+
+                  // Save the updated data to Firestore
+                  await FirebaseFirestore.instance
+                      .collection('usersRMUTT')
+                      .doc(widget.user.userId)
+                      .update(updatedUser.toJson());
+
+                  // Optionally, save updated data to SharedPreferences as well
+                  SharedPreferences prefs =
+                      await SharedPreferences.getInstance();
+                  prefs.setString('user', jsonEncode(updatedUser.toJson()));
+
+                  // Close the dialog
+                  Navigator.pop(context);
+
+                  // Optionally, show a confirmation message
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('ข้อมูลถูกบันทึกเรียบร้อยแล้ว')),
+                  );
+                } else {
+                  // Show error if fields are empty
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')),
+                  );
+                }
+              },
+              child: Text("บันทึก"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _logout() {
+    Navigator.of(context).popUntil(
+        (route) => route.isFirst); // กลับไปที่หน้าก่อนหน้า หรือหน้าหลัก
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -45,6 +140,58 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Text('Chat'),
         backgroundColor: Colors.teal,
         elevation: 0,
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.teal,
+              ),
+              child: Text(
+                'เมนู',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.edit),
+              title: Text('แก้ไขข้อมูล'),
+              onTap: _showEditDialog,
+            ),
+            ListTile(
+              leading: Icon(Icons.phone),
+              title: Text('เปลี่ยนเบอร์มือถือ'),
+              onTap: () {
+                // Show the dialog when the tile is tapped
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text('กรุณาติดต่อเจ้าหน้าที่'),
+                    content: Text(
+                        'หากคุณต้องการเปลี่ยนเบอร์มือถือ \nกรุณาติดต่อเจ้าหน้าที่'),
+                    actions: <Widget>[
+                      TextButton(
+                        child: Text('Okay'),
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.logout),
+              title: Text('ออกจากระบบ'),
+              onTap: _logout,
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
@@ -63,16 +210,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   return Center(child: Text('No messages yet'));
                 }
 
-                // Scroll to the bottom of the list when new messages arrive
                 _scrollToBottom();
 
                 return ListView(
                   controller: _scrollController,
                   children: snapshot.data!.docs.map((doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    bool isMe = data['senderUsername'] == widget.username;
+                    bool isMe = data['senderUsername'] == widget.user.username;
 
-                    // Format timestamp
                     var timestamp = data['timestamp'] != null
                         ? DateFormat('dd MMM yyyy HH:mm')
                             .format((data['timestamp'] as Timestamp).toDate())

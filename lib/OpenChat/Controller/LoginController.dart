@@ -1,36 +1,61 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:maps/OpenChat/model/usermodel.dart';
 
 import '../ChatScreen.dart';
 
 class LoginController {
-  FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  String hashPassword(String password) {
+    final bytes = utf8.encode(password);
+    final hash = sha256.convert(bytes);
+    print('Input Password: $password');
+    print('Hashed Result: ${hash.toString()}');
+    return hash.toString();
+  }
 
   Future<void> login({
     required String username,
     required String password,
     required BuildContext context,
-
   }) async {
     try {
+      print('Input Password: $password');
+
       QuerySnapshot querySnapshot = await _firestore
           .collection('usersRMUTT')
           .where('username', isEqualTo: username)
           .limit(1)
           .get();
+
       if (querySnapshot.docs.isNotEmpty) {
         var userDoc = querySnapshot.docs.first;
         String storedPassword = userDoc['password'];
-        String name = userDoc['name'];
 
+        print('Stored Password: $storedPassword');
+        print('Login Password: $password');
+
+        // เปรียบเทียบโดยตรง ไม่ต้อง hash ซ้ำ
         if (storedPassword == password) {
+          UserModel user = UserModel(
+            userId: userDoc['userId'],
+            username: userDoc['username'],
+            name: userDoc['name'],
+            password: userDoc['password'],
+            phoneNumber: (userDoc.data() != null &&
+                    (userDoc.data() as Map<String, dynamic>)
+                        .containsKey('phoneNumber'))
+                ? userDoc['phoneNumber']
+                : '',
+          );
 
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (context) => ChatScreen(
-                username: username,
-                name: name,
-              ),
+              builder: (context) => ChatScreen(user: user),
             ),
           );
         } else {

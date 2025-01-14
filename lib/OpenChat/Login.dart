@@ -1,4 +1,8 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import './Controller/LoginController.dart';
 
@@ -12,14 +16,67 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final LoginController _loginController = LoginController();
 
+  bool _isRememberMeChecked = false;
+  bool _isLoading = false;
+
+  String hashPassword(String password) {
+    final bytes = utf8.encode(password);
+    final hash = sha256.convert(bytes);
+    return hash.toString();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool? isLoggedIn = prefs.getBool('isLoggedIn');
+    String? username = prefs.getString('username');
+
+    if (isLoggedIn == true && username != null) {
+      _usernameController.text = username;
+      setState(() => _isRememberMeChecked = true);
+    }
+  }
+
   Future<void> _login() async {
     String username = _usernameController.text.trim();
     String password = _passwordController.text.trim();
-    _loginController.login(
-      username: username,
-      password: password,
-      context: context,
-    );
+
+    if (username.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter username and password')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      String hashedPassword = hashPassword(password);
+
+      // เก็บเฉพาะ username และ login state
+      if (_isRememberMeChecked) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        prefs.setString('username', username);
+        prefs.setBool('isLoggedIn', true);
+      }
+
+      await _loginController.login(
+        username: username,
+        password: hashedPassword,
+        context: context,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login failed: ${e.toString()}')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -75,12 +132,35 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     obscureText: true,
                   ),
+                  SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _isRememberMeChecked,
+                        onChanged: (bool? value) {
+                          setState(() {
+                            _isRememberMeChecked = value ?? false;
+                          });
+                        },
+                      ),
+                      Text("Remember me"),
+                    ],
+                  ),
                   SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _login,
-                    child: Text("Login",
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    onPressed: _isLoading ? null : _login,
+                    child: _isLoading
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text("Login",
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal,
                       foregroundColor: Colors.white,

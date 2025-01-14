@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:maps/DirectionController.dart';
 import 'package:maps/MarkerController.dart';
 import 'package:maps/OpenChat/Main.dart';
@@ -38,8 +40,6 @@ class MyApp extends StatelessWidget {
         title: 'RMUTT Map',
         theme: ThemeData(
           primarySwatch: Colors.lightBlue,
-          // กำหนดสีหลักเป็นสีขาวที่นี่
-          // คุณยังสามารถปรับแต่งธีมอื่นๆ ของแอปพลิเคชันได้ตามต้องการ
         ),
       ),
     );
@@ -62,8 +62,13 @@ class MapSampleState extends State<MapSample> {
   String _searchText = '';
   String? _searchType = '';
   Marker? _userMarker;
+  List<LatLng> _fullRoutePoints = [];
+  double _remainingDistance = 0.0;
+  bool _isNavigating = false;
   List<LatLng> _polylineCoordinates = [];
   bool _hasShownArrivalDialog = false;
+  bool _walkMode = true;
+  bool _carMode = false;
   late PanelController _panelController;
   bool _showPanel = false;
   double travelDuration = 0.0;
@@ -79,12 +84,21 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor _toilet = BitmapDescriptor.defaultMarker;
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _parkingIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _faculty = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _foodIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _classroomIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _serviceIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _libraryIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _atmIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _canteenIcon = BitmapDescriptor.defaultMarker;
+  Timer? _routeUpdateTimer;
+  bool _isRouteActive = false;
+  Timer? _locationUpdateTimer;
+  LatLng? _savedDestination;
+  String? _routeDistance;
+  String? _routeDuration;
+  String? _savedDestinationName;
+
   BitmapDescriptor _sportIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _seven = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
@@ -92,9 +106,10 @@ class MapSampleState extends State<MapSample> {
   String _destination = '';
   List<Marker> _markers = [];
   List<Map<String, dynamic>> _steps = [];
+
   double _travelDuration = 0.0;
   StreamSubscription<Position>? _locationSubscription;
-
+  List<LatLng> _currentPolylinePoints = [];
   @override
   void initState() {
     super.initState();
@@ -108,6 +123,8 @@ class MapSampleState extends State<MapSample> {
     _seven = await getResizedMarker('assets/iconCategory/seven.png', 125, 125);
     _atmIcon = await getResizedMarker('assets/iconCategory/atm.png', 125, 125);
     // _libraryIcon = await getResizedMarker('assets/iconCategory/Libra.png', width, height)
+    _faculty =
+        await getResizedMarker('assets/iconCategory/faculty.png', 125, 125);
   }
 
   Future<BitmapDescriptor> getResizedMarker(
@@ -180,6 +197,9 @@ class MapSampleState extends State<MapSample> {
               markerIcon = _parkingIcon;
               break;
             case 'เซเว่น':
+              markerIcon = _seven;
+              break;
+            case 'ตึกคณะ/ภาควิชา':
               markerIcon = _seven;
               break;
             default:
@@ -271,6 +291,7 @@ class MapSampleState extends State<MapSample> {
   void dispose() {
     _searchController.dispose();
     _locationSubscription?.cancel();
+    _routeUpdateTimer?.cancel();
     super.dispose();
   }
 
@@ -336,11 +357,7 @@ class MapSampleState extends State<MapSample> {
           IconButton(
             icon: Icon(Icons.gps_fixed),
             onPressed: () {
-              if (_locationSubscription == null) {
-                startTrackingLocation();
-              } else {
-                stopTrackingLocation();
-              }
+              _requestLocationPermission();
             },
           ),
         ],
@@ -387,25 +404,119 @@ class MapSampleState extends State<MapSample> {
               _controller.complete(controller);
             },
           ),
+          Positioned(
+            left: 4.0,
+            bottom: 8.0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Car mode switch
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _carMode = true;
+                        _walkMode = false;
+                        if (_currentPosition != null &&
+                            _destinationLatLng != null) {
+                          _polylines.clear();
+                          directionApiFromgoogleApi(_currentPosition!,
+                              _destinationLatLng!, _destination!);
+                        }
+                      });
+                    },
+                    child: Container(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _carMode ? Colors.blue : Colors.white,
+                        borderRadius:
+                            BorderRadius.horizontal(left: Radius.circular(20)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.directions_car,
+                            color: _carMode ? Colors.white : Colors.grey,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'รถ',
+                            style: TextStyle(
+                              color: _carMode ? Colors.white : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Walking mode switch
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _walkMode = true;
+                        _carMode = false;
+                        // If there's an active route, recalculate it
+                        if (_currentPosition != null &&
+                            _destinationLatLng != null) {
+                          _polylines.clear();
+                          _fetchRouteFromApiOnce(_currentPosition!,
+                              _destinationLatLng!, _destination!);
+                          _startPeriodicRouteUpdates();
+                        }
+                      });
+                    },
+                    child: Container(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _walkMode ? Colors.blue : Colors.white,
+                        borderRadius:
+                            BorderRadius.horizontal(right: Radius.circular(20)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.directions_walk,
+                            color: _walkMode ? Colors.white : Colors.grey,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'เดิน',
+                            style: TextStyle(
+                              color: _walkMode ? Colors.white : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           if (_polylines.isNotEmpty)
             SlidingUpPanel(
               controller: _panelController,
-              maxHeight: 60.0,
-              color: Color.fromARGB(255, 255, 255, 255),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(19.0)),
+              minHeight: 60.0, // กำหนดความสูงขั้นต่ำ
+              maxHeight: 60.0, // กำหนดความสูงสูงสุดเป็นค่าเดียวกับขั้นต่ำ
+              isDraggable: false, // ปิดการลาก
+              color: Color.fromARGB(255, 255, 255, 255), // กำหนดสีขาว
+              borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(15.0)), // เพิ่มขอบโค้งถ้าต้องการ
               panel: Column(
                 children: [
-                  // Expanded(
-                  //   child: Center(
-                  //     child: Text(
-                  //       'เวลาในการเดินทางโดยประมาณ : ${_travelDuration.toStringAsFixed(2)} นาที',
-                  //       style: TextStyle(
-                  //         fontSize: 19,
-                  //         color: Color.fromARGB(255, 0, 0, 0),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -416,6 +527,14 @@ class MapSampleState extends State<MapSample> {
                             _showCancelButton = false;
                             _markers.clear();
                             _showPanel = false;
+                            _cancelRoute();
+                            // ยกเลิกการอัพเดตเส้นทางแบบ periodic
+                            _routeUpdateTimer?.cancel();
+                            _routeUpdateTimer = null;
+
+                            // รีเซ็ตสถานะอื่น ๆ ที่เกี่ยวข้องกับเส้นทางถ้าจำเป็น
+                            _isLoadingRoute = false;
+                            _steps.clear();
                           });
                         },
                         child: Center(
@@ -601,6 +720,7 @@ class MapSampleState extends State<MapSample> {
   Future<void> _requestLocationPermission() async {
     bool serviceEnabled;
     LocationPermission permission;
+
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       return Future.error('Location services are disabled.');
@@ -619,50 +739,7 @@ class MapSampleState extends State<MapSample> {
           'Location permissions are permanently denied, we cannot request permissions.');
     }
 
-    showUserLocation();
-  }
-
-  Future<void> showUserLocation() async {
-    try {
-      Position currentPosition = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
-      setState(() {
-        _currentPosition = LatLng(
-          currentPosition.latitude,
-          currentPosition.longitude,
-        );
-      });
-
-      GoogleMapController controller = await _controller.future;
-      controller
-          .animateCamera(CameraUpdate.newLatLngZoom(_currentPosition!, 18));
-
-      StreamSubscription<Position> positionStream =
-          Geolocator.getPositionStream(
-        locationSettings: LocationSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: 1,
-          timeLimit: Duration(seconds: 0),
-        ),
-      ).listen((Position position) {
-        setState(() {
-          _currentPosition = LatLng(position.latitude, position.longitude);
-        });
-
-        if (!_cameraMoved) {
-          controller.animateCamera(CameraUpdate.newLatLng(_currentPosition!));
-          _cameraMoved = true;
-        }
-
-        if (_destinationLatLng != null) {
-          _updateRouteProgress(_currentPosition!, _destinationLatLng!);
-        }
-      });
-    } catch (e) {
-      print('Error: Cannot get current location - $e');
-    }
+    startTrackingLocation();
   }
 
   void _updateRouteProgress(LatLng currentPosition, LatLng destination) {
@@ -671,46 +748,58 @@ class MapSampleState extends State<MapSample> {
       return;
     }
 
-    final double passThreshold = 35.0;
+    final double passThreshold = 30.0;
     final double arrivalThreshold = 10.0;
 
-    int nearestUnpassedIndex = -1;
+    int closestPolylineIndex = 0;
     double minDistance = double.infinity;
 
-    for (int i = 0; i < _steps.length; i++) {
-      if (_steps[i]['passed'] == true) {
-        continue;
-      }
-
-      LatLng stepPoint = _steps[i]['point'];
+    for (int i = 0; i < _polylineCoordinates.length; i++) {
       double distance = Geolocator.distanceBetween(
         currentPosition.latitude,
         currentPosition.longitude,
-        stepPoint.latitude,
-        stepPoint.longitude,
+        _polylineCoordinates[i].latitude,
+        _polylineCoordinates[i].longitude,
       );
 
       if (distance < minDistance) {
         minDistance = distance;
-        nearestUnpassedIndex = i;
+        closestPolylineIndex = i;
       }
     }
 
-    if (nearestUnpassedIndex != -1 && minDistance <= passThreshold) {
+    if (minDistance <= passThreshold) {
       setState(() {
-        for (int i = 0; i <= nearestUnpassedIndex; i++) {
-          _steps[i]['passed'] = true;
+        // Update passed steps
+        for (var step in _steps) {
+          if (step['start_index'] <= closestPolylineIndex) {
+            step['passed'] = true;
+          }
         }
 
-        int polylineIndex =
-            _findCorrespondingPolylineIndex(nearestUnpassedIndex);
-        _polylineCoordinates = _polylineCoordinates.sublist(polylineIndex);
+        if (closestPolylineIndex < _polylineCoordinates.length - 1) {
+          _polylineCoordinates =
+              _polylineCoordinates.sublist(closestPolylineIndex);
+          final int offset = closestPolylineIndex;
+          for (var step in _steps) {
+            if (!step['passed']) {
+              int newStartIndex = (step['start_index'] as int) - offset;
+              step['start_index'] = newStartIndex < 0 ? 0 : newStartIndex;
 
-        _updatePolyline();
+              int newEndIndex = (step['end_index'] as int) - offset;
+              step['end_index'] = newEndIndex < 0 ? 0 : newEndIndex;
+              step['coordinates'] =
+                  (step['coordinates'] as List<LatLng>).where((coord) {
+                int coordIndex = _polylineCoordinates.indexOf(coord);
+                return coordIndex != -1;
+              }).toList();
+            }
+          }
+        }
       });
     }
 
-    // เช็คระยะทางถึงจุดหมายและจำนวน polyline points
+    // Check for arrival
     double distanceToDestination = Geolocator.distanceBetween(
       currentPosition.latitude,
       currentPosition.longitude,
@@ -718,81 +807,19 @@ class MapSampleState extends State<MapSample> {
       destination.longitude,
     );
 
-    // เพิ่มเงื่อนไขเช็ค polyline
-    bool isNearDestination = distanceToDestination <= arrivalThreshold;
-    bool isPolylineEmpty =
-        _polylineCoordinates.length <= 2; // เหลือแค่จุดเริ่มต้นและจุดสุดท้าย
-
-    if ((isNearDestination || isPolylineEmpty) && !_hasShownArrivalDialog) {
+    if (distanceToDestination <= arrivalThreshold && !_hasShownArrivalDialog) {
       _showArrivalDialog();
       _hasShownArrivalDialog = true;
-
-      // หยุดการติดตามตำแหน่ง (optional)
       stopTrackingLocation();
     }
   }
 
-  int _findCorrespondingPolylineIndex(int stepIndex) {
-    if (stepIndex >= _steps.length || _steps.isEmpty) return 0;
-
-    LatLng stepPoint = _steps[stepIndex]['point'];
-    int closestIndex = 0;
-    double minDistance = double.infinity;
-
-    // หาจุดใน polyline coordinates ที่ใกล้ที่สุดกับ step point
-    for (int i = 0; i < _polylineCoordinates.length; i++) {
-      double distance = Geolocator.distanceBetween(
-        stepPoint.latitude,
-        stepPoint.longitude,
-        _polylineCoordinates[i].latitude,
-        _polylineCoordinates[i].longitude,
-      );
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = i;
-      }
-    }
-
-    return closestIndex;
-  }
-
-  void _updatePolyline() {
-    _polylines.clear();
-    _polylines.add(
-      Polyline(
-        polylineId: const PolylineId('route'),
-        points: _polylineCoordinates,
-        color: Colors.blue,
-        width: 5,
-      ),
-    );
-  }
-
-  bool _hasRequestedRoute = false;
-
-  void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
-      String destination) async {
-    if (_isLoadingRoute) return;
-    setState(() {
-      _isLoadingRoute = true;
-      _polylines.clear();
-      _steps.clear();
-    });
-    final directionController = DirectionController(
-      onRouteFetched: (polylineCoordinates, steps) {
-        setState(() {
-          _steps = List<Map<String, dynamic>>.from(steps);
-          _addPolyline(polylineCoordinates);
-          _isLoadingRoute = false;
-        });
-      },
-    );
-    await directionController.fetchAndCalculateRoutes(
-        currentPosition, destinationLatLng);
-  }
-
   void resetRouteRequest() {
+    _routeUpdateTimer?.cancel();
+    _routeUpdateTimer = null;
+    _savedDestination = null;
+    _savedDestinationName = null;
+
     setState(() {
       _hasRequestedRoute = false;
       _polylines.clear();
@@ -800,11 +827,95 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
+  bool _hasRequestedRoute = false;
+
+  void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
+      String destination) async {
+    if (_isLoadingRoute || !_isRouteActive) return;
+
+    setState(() {
+      _isLoadingRoute = true;
+    });
+
+    final directionController = DirectionController(
+      onRouteFetched: (polylineCoordinates, steps) {
+        if (_shouldUpdatePolyline(polylineCoordinates) && _isRouteActive) {
+          setState(() {
+            _steps = List<Map<String, dynamic>>.from(steps);
+            _updatePolylineSmoothly(polylineCoordinates);
+            _currentPolylinePoints = polylineCoordinates;
+            _isLoadingRoute = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingRoute = false;
+          });
+        }
+      },
+      onArrivalDetected: () {
+        _handleArrival();
+      },
+    );
+
+    try {
+      if (_isRouteActive) {
+        await directionController.fetchAndCalculateRoutes(
+            currentPosition, destinationLatLng);
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingRoute = false;
+      });
+      print('Error in _fetchRouteFromApiOnce: $e');
+    }
+  }
+
+  bool _shouldUpdatePolyline(List<LatLng> newPolylinePoints) {
+    if (_currentPolylinePoints.isEmpty) return true;
+
+    // เปรียบเทียบจุดเริ่มต้นและจุดสิ้นสุดของเส้นทาง
+    double startPointDiff = Geolocator.distanceBetween(
+      _currentPolylinePoints.first.latitude,
+      _currentPolylinePoints.first.longitude,
+      newPolylinePoints.first.latitude,
+      newPolylinePoints.first.longitude,
+    );
+
+    double endPointDiff = Geolocator.distanceBetween(
+      _currentPolylinePoints.last.latitude,
+      _currentPolylinePoints.last.longitude,
+      newPolylinePoints.last.latitude,
+      newPolylinePoints.last.longitude,
+    );
+
+    // อัปเดตเฉพาะเมื่อมีความแตกต่างที่มากพอ
+    return startPointDiff > 5 || endPointDiff > 5;
+  }
+
+  void startRouteTracking(LatLng currentPosition, LatLng destinationLatLng) {
+    startTrackingLocation(); // เริ่มติดตามตำแหน่งปัจจุบัน
+    startPeriodicRouteUpdates(
+        currentPosition, destinationLatLng); // เริ่มอัปเดตเส้นทาง
+  }
+
+  void startPeriodicRouteUpdates(
+      LatLng currentPosition, LatLng destinationLatLng) {
+    _routeUpdateTimer?.cancel(); // ยกเลิก Timer เดิมถ้ามี
+    _routeUpdateTimer = Timer.periodic(Duration(seconds: 2), (_) {
+      _fetchRouteFromApiOnce(currentPosition, destinationLatLng, 'Destination');
+    });
+  }
+
+  void stopRouteTracking() {
+    stopTrackingLocation(); // หยุดติดตามตำแหน่งปัจจุบัน
+    _routeUpdateTimer?.cancel(); // หยุดการอัปเดตเส้นทาง
+  }
+
   void startTrackingLocation() {
     _locationSubscription = Geolocator.getPositionStream(
       locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5, // อัปเดตทุกระยะ 5 เมตร
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 0,
       ),
     ).listen((Position position) {
       setState(() {
@@ -826,9 +937,59 @@ class MapSampleState extends State<MapSample> {
     _locationSubscription?.cancel();
   }
 
+  void _updatePolylineSmoothly(List<LatLng> newPolylinePoints) {
+    final Polyline newPolyline = Polyline(
+      polylineId: PolylineId('route'),
+      points: newPolylinePoints,
+      color: Colors.blue,
+      width: 5,
+    );
+
+    setState(() {
+      _polylines.clear();
+      _polylines.add(newPolyline);
+    });
+  }
+
   void _moveCameraToPosition(LatLng position) async {
     final controller = await _controller.future;
     controller.animateCamera(CameraUpdate.newLatLngZoom(position, 18));
+  }
+
+  void _startPeriodicRouteUpdates() {
+    _routeUpdateTimer?.cancel();
+    _routeUpdateTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+      if (_currentPosition != null && _savedDestination != null) {
+        _fetchRouteFromApiOnce(
+            _currentPosition!, _savedDestination!, _savedDestinationName ?? '');
+      }
+    });
+  }
+
+  void _cancelRoute() {
+    setState(() {
+      _polylines.clear();
+      _showCancelButton = false;
+      _markers.clear();
+      _showPanel = false;
+      _steps.clear();
+
+      _isRouteActive = false;
+      _isLoadingRoute = false;
+      _isNavigating = false;
+
+      _routeUpdateTimer?.cancel();
+      _routeUpdateTimer = null;
+      _locationUpdateTimer?.cancel();
+      _locationUpdateTimer = null;
+      _locationSubscription?.cancel();
+
+      // Clear route data
+      _currentPolylinePoints = [];
+      _fullRoutePoints = [];
+      _savedDestination = null;
+      _savedDestinationName = null;
+    });
   }
 
   void _onMarkerTap(LatLng endLocation, String destination) {
@@ -844,8 +1005,17 @@ class MapSampleState extends State<MapSample> {
               onPressed: () {
                 Navigator.of(context).pop();
                 if (_currentPosition != null) {
-                  _fetchRouteFromApiOnce(
-                      _currentPosition!, endLocation, destination);
+                  _savedDestination = endLocation;
+                  _savedDestinationName = destination;
+                  _isRouteActive = true; // Set route as active
+                  if (_walkMode) {
+                    _fetchRouteFromApiOnce(
+                        _currentPosition!, endLocation, destination);
+                    _startPeriodicRouteUpdates();
+                  } else {
+                    directionApiFromgoogleApi(
+                        _currentPosition!, endLocation, destination);
+                  }
                 }
               },
               child: Text('ใช่'),
@@ -862,18 +1032,35 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  void _addPolyline(List<LatLng> polylineCoordinates) {
-    _polylineCoordinates = polylineCoordinates;
-    _updatePolyline();
+  List<List<double>> decodePolyline(String encoded) {
+    List<List<double>> poly = [];
+    int index = 0, len = encoded.length;
+    int lat = 0, lng = 0;
 
-    // สร้าง steps จากพิกัดทั้งหมด
-    _steps = List<Map<String, dynamic>>.generate(
-      polylineCoordinates.length,
-      (index) => {
-        'point': polylineCoordinates[index],
-        'index': index,
-      },
-    );
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      poly.add([lat / 1E5, lng / 1E5]);
+    }
+
+    return poly;
   }
 
   void _showArrivalDialog() {
@@ -1003,11 +1190,214 @@ class MapSampleState extends State<MapSample> {
                     _showCategoryLocations('เซเว่น');
                   },
                 ),
+                ListTile(
+                  leading: Icon(Icons.school),
+                  title: Text('ตึกคณะ/ภาควิชา'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCategoryLocations('ตึกคณะ/ภาควิชา');
+                  },
+                ),
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  Future<void> directionApiFromgoogleApi(
+      LatLng origin, LatLng destination, String destinationName) async {
+    if (!_isRouteActive) return;
+
+    setState(() {
+      _isLoadingRoute = true;
+      _showPanel = true;
+      _isNavigating = true;
+    });
+
+    try {
+      final String apiKey = 'AIzaSyBiBXvhX4YenKelpFUA30_R5p_OVkbHy8o';
+      final String baseUrl =
+          'https://maps.googleapis.com/maps/api/directions/json';
+
+      final response = await http.get(
+        Uri.parse('$baseUrl?'
+            'origin=${origin.latitude},${origin.longitude}'
+            '&destination=${destination.latitude},${destination.longitude}'
+            '&mode=driving'
+            '&language=th'
+            '&key=$apiKey'),
+      );
+
+      if (response.statusCode == 200 && _isRouteActive) {
+        final decodedResponse = json.decode(response.body);
+
+        if (decodedResponse['status'] == 'OK') {
+          setState(() {
+            _polylines.clear();
+            _steps.clear();
+          });
+
+          final route = decodedResponse['routes'][0];
+          final leg = route['legs'][0];
+          String encodedPoints = route['overview_polyline']['points'];
+
+          _fullRoutePoints = decodePolyline(encodedPoints)
+              .map((point) => LatLng(point[0], point[1]))
+              .toList();
+
+          updateRoutePolyline(_fullRoutePoints);
+          startTrackingLocation2();
+
+          final GoogleMapController controller = await _controller.future;
+          controller.animateCamera(
+            CameraUpdate.newLatLngZoom(_currentPosition!, 18),
+          );
+
+          setState(() {
+            _routeDistance = leg['distance']['text'];
+            _routeDuration = leg['duration']['text'];
+            _isLoadingRoute = false;
+          });
+        }
+      }
+    } catch (e) {
+      handleDirectionError(e);
+    }
+  }
+
+  int findClosestPointOnRoute(LatLng currentPosition) {
+    int closestIndex = 0;
+    double closestDistance = double.infinity;
+
+    for (int i = 0; i < _fullRoutePoints.length; i++) {
+      double distance = calculateDistance(
+        currentPosition.latitude,
+        currentPosition.longitude,
+        _fullRoutePoints[i].latitude,
+        _fullRoutePoints[i].longitude,
+      );
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = i;
+      }
+    }
+
+    return closestIndex;
+  }
+
+  double calculateRemainingDistance(List<LatLng> points) {
+    double distance = 0;
+    for (int i = 0; i < points.length - 1; i++) {
+      distance += calculateDistance(
+        points[i].latitude,
+        points[i].longitude,
+        points[i + 1].latitude,
+        points[i + 1].longitude,
+      );
+    }
+    return distance;
+  }
+
+// Update polyline on map
+  void updateRoutePolyline(List<LatLng> points) {
+    setState(() {
+      _polylines.clear();
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: points,
+          color: Colors.blue,
+          width: 5,
+        ),
+      );
+    });
+  }
+
+  void handleDirectionError(dynamic error) {
+    setState(() {
+      _isLoadingRoute = false;
+      _isNavigating = false;
+    });
+
+    print('Error fetching directions: $error');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('ข้อผิดพลาด'),
+        content: Text('ไม่สามารถดึงข้อมูลเส้นทางได้ กรุณาลองใหม่อีกครั้ง'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('ตกลง'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleArrival() {
+    if (!_isRouteActive) return;
+
+    _cancelRoute();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('ถึงจุดหมายแล้ว'),
+        content: Text('คุณได้เดินทางมาถึงจุดหมายแล้ว'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('ตกลง'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2);
+  }
+
+  void startTrackingLocation2() {
+    _locationSubscription?.cancel();
+    _locationSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 5, // Update every 5 meters
+      ),
+    ).listen((Position position) {
+      if (!_isNavigating) return;
+
+      setState(() {
+        _currentPosition = LatLng(position.latitude, position.longitude);
+      });
+
+      updateNavigationProgress2();
+    });
+  }
+
+  void updateNavigationProgress2() async {
+    if (_currentPosition == null || _fullRoutePoints.isEmpty) return;
+
+    int closestPointIndex = findClosestPointOnRoute(_currentPosition!);
+
+    List<LatLng> remainingPoints = _fullRoutePoints.sublist(closestPointIndex);
+
+    updateRoutePolyline(remainingPoints);
+
+    _remainingDistance = calculateRemainingDistance(remainingPoints);
+
+    if (_remainingDistance < 20) {
+      _handleArrival();
+    }
+    if (!_cameraMoved) {
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(CameraUpdate.newLatLng(_currentPosition!));
+    }
   }
 }
