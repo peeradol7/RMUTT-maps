@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:maps/OpenChat/forgotPassword/ForgotPasswordScreen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import './Controller/LoginController.dart';
@@ -58,7 +59,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       String hashedPassword = hashPassword(password);
 
-      // เก็บเฉพาะ username และ login state
       if (_isRememberMeChecked) {
         SharedPreferences prefs = await SharedPreferences.getInstance();
         prefs.setString('username', username);
@@ -144,6 +144,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                       ),
                       Text("Remember me"),
+                      Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ForgotPasswordScreen(),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          "Forgot Password?",
+                          style: TextStyle(color: Colors.blue),
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: 20),

@@ -68,6 +68,7 @@ class MapSampleState extends State<MapSample> {
   List<LatLng> _polylineCoordinates = [];
   bool _hasShownArrivalDialog = false;
   bool _walkMode = true;
+  Stream<Position>? _locationStream;
   bool _carMode = false;
   late PanelController _panelController;
   bool _showPanel = false;
@@ -92,6 +93,7 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor _atmIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _canteenIcon = BitmapDescriptor.defaultMarker;
   Timer? _routeUpdateTimer;
+  StreamSubscription<Position>? _navigationLocationSubscription;
   bool _isRouteActive = false;
   Timer? _locationUpdateTimer;
   LatLng? _savedDestination;
@@ -200,7 +202,7 @@ class MapSampleState extends State<MapSample> {
               markerIcon = _seven;
               break;
             case 'ตึกคณะ/ภาควิชา':
-              markerIcon = _seven;
+              markerIcon = _faculty;
               break;
             default:
               markerIcon = BitmapDescriptor.defaultMarker;
@@ -509,12 +511,11 @@ class MapSampleState extends State<MapSample> {
           if (_polylines.isNotEmpty)
             SlidingUpPanel(
               controller: _panelController,
-              minHeight: 60.0, // กำหนดความสูงขั้นต่ำ
-              maxHeight: 60.0, // กำหนดความสูงสูงสุดเป็นค่าเดียวกับขั้นต่ำ
+              minHeight: 60.0,
+              maxHeight: 60.0,
               isDraggable: false, // ปิดการลาก
-              color: Color.fromARGB(255, 255, 255, 255), // กำหนดสีขาว
-              borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(15.0)), // เพิ่มขอบโค้งถ้าต้องการ
+              color: Color.fromARGB(255, 255, 255, 255),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(15.0)),
               panel: Column(
                 children: [
                   Row(
@@ -837,11 +838,20 @@ class MapSampleState extends State<MapSample> {
       _isLoadingRoute = true;
     });
 
+    if (_isRouteActive) {
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(
+        CameraUpdate.newLatLngZoom(currentPosition, 20),
+      );
+    }
+
     final directionController = DirectionController(
       onRouteFetched: (polylineCoordinates, steps) {
         if (_shouldUpdatePolyline(polylineCoordinates) && _isRouteActive) {
           setState(() {
-            _steps = List<Map<String, dynamic>>.from(steps);
+            // Cast the steps to the correct type
+            _steps =
+                steps.map((step) => Map<String, dynamic>.from(step)).toList();
             _updatePolylineSmoothly(polylineCoordinates);
             _currentPolylinePoints = polylineCoordinates;
             _isLoadingRoute = false;
@@ -860,7 +870,9 @@ class MapSampleState extends State<MapSample> {
     try {
       if (_isRouteActive) {
         await directionController.fetchAndCalculateRoutes(
-            currentPosition, destinationLatLng);
+          currentPosition,
+          destinationLatLng,
+        );
       }
     } catch (e) {
       setState(() {
@@ -984,7 +996,6 @@ class MapSampleState extends State<MapSample> {
       _locationUpdateTimer = null;
       _locationSubscription?.cancel();
 
-      // Clear route data
       _currentPolylinePoints = [];
       _fullRoutePoints = [];
       _savedDestination = null;
@@ -994,20 +1005,29 @@ class MapSampleState extends State<MapSample> {
 
   void _onMarkerTap(LatLng endLocation, String destination) {
     if (_isLoadingRoute) return;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('แสดงเส้นทาง'),
           content: Text('ต้องการให้แสดงเส้นทางไปยัง $destination หรือไม่'),
-          actions: <Widget>[
+          actions: [
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(context).pop();
                 if (_currentPosition != null) {
                   _savedDestination = endLocation;
                   _savedDestinationName = destination;
-                  _isRouteActive = true; // Set route as active
+                  _isRouteActive = true;
+
+                  // Lock camera to current location with zoom level 20
+                  final GoogleMapController controller =
+                      await _controller.future;
+                  controller.animateCamera(
+                    CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+                  );
+
                   if (_walkMode) {
                     _fetchRouteFromApiOnce(
                         _currentPosition!, endLocation, destination);
@@ -1220,7 +1240,6 @@ class MapSampleState extends State<MapSample> {
       final String apiKey = 'AIzaSyBiBXvhX4YenKelpFUA30_R5p_OVkbHy8o';
       final String baseUrl =
           'https://maps.googleapis.com/maps/api/directions/json';
-
       final response = await http.get(
         Uri.parse('$baseUrl?'
             'origin=${origin.latitude},${origin.longitude}'
@@ -1232,7 +1251,6 @@ class MapSampleState extends State<MapSample> {
 
       if (response.statusCode == 200 && _isRouteActive) {
         final decodedResponse = json.decode(response.body);
-
         if (decodedResponse['status'] == 'OK') {
           setState(() {
             _polylines.clear();
@@ -1242,7 +1260,6 @@ class MapSampleState extends State<MapSample> {
           final route = decodedResponse['routes'][0];
           final leg = route['legs'][0];
           String encodedPoints = route['overview_polyline']['points'];
-
           _fullRoutePoints = decodePolyline(encodedPoints)
               .map((point) => LatLng(point[0], point[1]))
               .toList();
@@ -1251,8 +1268,9 @@ class MapSampleState extends State<MapSample> {
           startTrackingLocation2();
 
           final GoogleMapController controller = await _controller.future;
+          // Update zoom level to 20
           controller.animateCamera(
-            CameraUpdate.newLatLngZoom(_currentPosition!, 18),
+            CameraUpdate.newLatLngZoom(_currentPosition!, 20),
           );
 
           setState(() {
@@ -1264,6 +1282,16 @@ class MapSampleState extends State<MapSample> {
       }
     } catch (e) {
       handleDirectionError(e);
+    }
+  }
+
+// Add this new method to keep the camera centered on current location
+  void _keepCameraCentered() async {
+    if (_isRouteActive && _currentPosition != null) {
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(
+        CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+      );
     }
   }
 
@@ -1364,20 +1392,16 @@ class MapSampleState extends State<MapSample> {
   }
 
   void startTrackingLocation2() {
-    _locationSubscription?.cancel();
-    _locationSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.best,
-        distanceFilter: 5, // Update every 5 meters
-      ),
-    ).listen((Position position) {
-      if (!_isNavigating) return;
-
+    _navigationLocationSubscription?.cancel();
+    _navigationLocationSubscription =
+        _locationStream?.listen((Position position) async {
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
       });
 
-      updateNavigationProgress2();
+      if (_isRouteActive) {
+        _keepCameraCentered();
+      }
     });
   }
 

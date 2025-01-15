@@ -1,64 +1,21 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:maps/OpenChat/OTPVerification.dart';
 
-class SendOTPScreen extends StatefulWidget {
+class InputPhoneNumberScreen extends StatefulWidget {
   @override
-  _RegisterScreenState createState() => _RegisterScreenState();
+  _InputPhoneNumberScreenState createState() => _InputPhoneNumberScreenState();
 }
 
-class _RegisterScreenState extends State<SendOTPScreen> {
+class _InputPhoneNumberScreenState extends State<InputPhoneNumberScreen> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
   bool _isButtonDisabled = false;
   bool _isCheckbox = false;
-
-  Future<void> sendOTP(String phoneNumber) async {
-    if (_isLoading) return;
-    setState(() => _isLoading = true);
-
-    final url = Uri.parse('https://console.sms-kub.com/api/v2/otp/request');
-
-    final headers = {
-      'Authorization': 'Key thjF6P1TOF5k5zQrTGl7kNs7fFgY03IC',
-      'Content-Type': 'application/json',
-    };
-
-    final body = jsonEncode({
-      'phone': phoneNumber,
-      'project': '668cc35202f3a7634f532266',
-    });
-
-    try {
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: body,
-      );
-
-      if (response.statusCode == 200) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                VerificationOTPScreen(phoneNumber: phoneNumber),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send OTP. Please try again.')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Network error. Please check your connection.')),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
 
   void _showAgreementDialog() {
     showDialog(
@@ -70,7 +27,8 @@ class _RegisterScreenState extends State<SendOTPScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                  "คำชี้แจงเกี่ยวกับข้อมูลส่วนตัว\n\nในขั้นตอนการสมัครสมาชิก คุณจะต้องให้ข้อมูลบางประการเพื่อทำการลงทะเบียนในระบบ โดยข้อมูลที่เราขอจากคุณคือ เบอร์โทรศัพท์มือถือ เท่านั้น\n\nการใช้ข้อมูล\nข้อมูลเบอร์โทรศัพท์ของคุณจะถูกใช้เพียงเพื่อการยืนยันตัวตนและการส่งรหัส OTP (One Time Password) เพื่อให้คุณสามารถยืนยันการสมัครสมาชิกในระบบของเรา\n\nการรักษาความปลอดภัย\nเรามีมาตรการในการรักษาความปลอดภัยของข้อมูลส่วนตัวของคุณอย่างเข้มงวด โดยข้อมูลของคุณจะไม่ถูกเปิดเผยหรือใช้เพื่อวัตถุประสงค์อื่นใดโดยไม่ได้รับความยินยอมจากคุณ\n\nการยินยอม\nโดยการให้ข้อมูลเบอร์โทรศัพท์มือถือกับเรา คุณยอมรับว่าคุณได้อ่านและเข้าใจข้อตกลงนี้ และยินยอมให้เรานำข้อมูลดังกล่าวไปใช้ในการยืนยันตัวตนสำหรับการสมัครสมาชิกในระบบของเรา"),
+                "คำชี้แจงเกี่ยวกับข้อมูลส่วนตัว\n\nในขั้นตอนการสมัครสมาชิก คุณจะต้องให้ข้อมูลบางประการเพื่อทำการลงทะเบียนในระบบ โดยข้อมูลที่เราขอจากคุณคือ เบอร์โทรศัพท์มือถือ เท่านั้น\n\nการใช้ข้อมูล\nข้อมูลเบอร์โทรศัพท์ของคุณจะถูกใช้เพียงเพื่อการยืนยันตัวตนและการส่งรหัส OTP (One Time Password) เพื่อให้คุณสามารถยืนยันการสมัครสมาชิกในระบบของเรา\n\nการรักษาความปลอดภัย\nเรามีมาตรการในการรักษาความปลอดภัยของข้อมูลส่วนตัวของคุณอย่างเข้มงวด โดยข้อมูลของคุณจะไม่ถูกเปิดเผยหรือใช้เพื่อวัตถุประสงค์อื่นใดโดยไม่ได้รับความยินยอมจากคุณ\n\nการยินยอม\nโดยการให้ข้อมูลเบอร์โทรศัพท์มือถือกับเรา คุณยอมรับว่าคุณได้อ่านและเข้าใจข้อตกลงนี้ และยินยอมให้เรานำข้อมูลดังกล่าวไปใช้ในการยืนยันตัวตนสำหรับการสมัครสมาชิกในระบบของเรา",
+              ),
             ],
           ),
         ),
@@ -78,6 +36,107 @@ class _RegisterScreenState extends State<SendOTPScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text("ปิด"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String formatPhoneNumber(String phone) {
+    if (phone.startsWith('0')) {
+      return '66${phone.substring(1)}';
+    }
+    return phone;
+  }
+
+  Future<bool> checkPhoneInFirebase(String phoneNumber) async {
+    try {
+      final QuerySnapshot result = await _firestore
+          .collection('usersRMUTT')
+          .where('phoneNumber', isEqualTo: phoneNumber)
+          .get();
+
+      return result.docs.isNotEmpty;
+    } catch (e) {
+      print('Error checking phone in Firebase: $e');
+      return false;
+    }
+  }
+
+  Future<void> sendOTP(String phoneNumber) async {
+    setState(() => _isLoading = true);
+
+    try {
+      if (!phoneNumber.startsWith('0')) {
+        _showErrorDialog("กรุณาใส่เบอร์โทรที่ขึ้นต้นด้วย 0");
+        return;
+      }
+
+      String formattedPhone = formatPhoneNumber(phoneNumber);
+
+      bool phoneExists = await checkPhoneInFirebase(formattedPhone);
+      if (phoneExists) {
+        _showErrorDialog("เบอร์โทรนี้มีในระบบอยู่แล้ว กรุณาใช้เบอร์อื่น");
+        return;
+      }
+
+      const String url = 'https://apicall.deesmsx.com/v1/otp/request';
+      final Map<String, String> headers = {'Content-Type': 'application/json'};
+      final Map<String, dynamic> body = {
+        "secretKey": "ec7ccf46-90cff8f2-170e19f1-725835ce",
+        "apiKey": "ac22861a-3b9eb09a-ad300ddd-d26d94a3",
+        "to": formattedPhone,
+        "sender": "RMUTT-Nav",
+        "lang": "th",
+        "isShowRef": "1",
+      };
+
+      final response = await http.post(Uri.parse(url),
+          headers: headers, body: jsonEncode(body));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['status'] == '200' &&
+            data['result'] != null &&
+            data['result']['token'] != null) {
+          final token = data['result']['token'];
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VerificationScreen(
+                phoneNumber: formattedPhone, // ส่งเบอร์ที่แปลงแล้วไป
+                token: token,
+              ),
+            ),
+          );
+        } else {
+          String errorMessage =
+              data['msg'] ?? "Failed to send OTP. Please try again.";
+          _showErrorDialog(errorMessage);
+        }
+      } else {
+        _showErrorDialog(
+            "Server error (${response.statusCode}): ${response.body}");
+      }
+    } catch (error) {
+      print('Error sending OTP: $error');
+      _showErrorDialog("An error occurred: $error");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Error"),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("OK"),
           ),
         ],
       ),

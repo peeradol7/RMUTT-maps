@@ -113,7 +113,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => SendOTPScreen(),
+                            builder: (context) => InputPhoneNumberScreen(),
                           ),
                         );
                       },

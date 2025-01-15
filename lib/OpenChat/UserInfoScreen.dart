@@ -3,11 +3,12 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:maps/OpenChat/Main.dart';
 
 class UserInfoScreen extends StatefulWidget {
-  // final String phoneNumber;
+  final String phoneNumber;
 
-  // UserInfoScreen({required this.phoneNumber});
+  UserInfoScreen({required this.phoneNumber});
 
   @override
   _UserInfoScreenState createState() => _UserInfoScreenState();
@@ -49,7 +50,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   Future<void> saveUserData({
     required String name,
     required String username,
-    // required String phoneNumber,
+    required String phoneNumber,
     required String password,
   }) async {
     setState(() => _isLoading = true);
@@ -69,15 +70,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         'userId': userId,
         'name': name,
         'username': username,
-        // 'phoneNumber': phoneNumber,
+        'phoneNumber': phoneNumber,
         'password': hashedPassword,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('User data saved successfully!')),
+        SnackBar(content: Text('สมัครสมาชิกเรียบร้อย')),
       );
-      Navigator.pop(context);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => WelcomeScreen()),
+      );
     } catch (e) {
       _showErrorDialog(context, 'Failed to save user data. Please try again.');
     } finally {
@@ -188,7 +192,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       await saveUserData(
                         name: name,
                         username: username,
-                        // phoneNumber: widget.phoneNumber,
+                        phoneNumber: widget.phoneNumber,
                         password: password,
                       );
                     },
