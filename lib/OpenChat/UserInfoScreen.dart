@@ -120,9 +120,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
-                labelText: "Name",
+                labelText: "กรอกชื่อ",
                 border: OutlineInputBorder(),
-                helperText: "Enter your full name",
+                helperText: "กรอกชื่อจริงของคุณ",
               ),
               keyboardType: TextInputType.text,
             ),
@@ -130,9 +130,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             TextField(
               controller: _usernameController,
               decoration: InputDecoration(
-                labelText: "Username",
+                labelText: "กรอกชื่อผู้ใช้",
                 border: OutlineInputBorder(),
-                helperText: "At least 6 characters, letters and numbers only",
+                helperText: "กรอกชื่อผู้ใช้อย่างน้อยจำนวน 6 ตัวอักษรและตัวเลข",
               ),
               keyboardType: TextInputType.text,
             ),
@@ -140,10 +140,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             TextField(
               controller: _passwordController,
               decoration: InputDecoration(
-                labelText: "Password",
+                labelText: "กรอกรหัสผ่าน",
                 border: OutlineInputBorder(),
                 helperText:
-                    "Min 8 chars, include uppercase, lowercase, number, and special char",
+                    "อักขระขั้นต่ำ 8 ตัว ประกอบด้วยตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ",
               ),
               obscureText: true,
             ),
@@ -151,7 +151,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             TextField(
               controller: _confirmPasswordController,
               decoration: InputDecoration(
-                labelText: "Confirm Password",
+                labelText: "ยืนยันรหัสผ่าน",
                 border: OutlineInputBorder(),
               ),
               obscureText: true,
@@ -168,24 +168,24 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           _confirmPasswordController.text.trim();
 
                       if (!isValidName(name)) {
-                        _showErrorDialog(context, 'Please enter your name.');
+                        _showErrorDialog(context, 'คุณยังไม่ได้กรอกชื่อ กรุณากรอกชื่อ');
                         return;
                       }
 
                       if (!isValidUsername(username)) {
                         _showErrorDialog(context,
-                            'Username must be at least 6 characters and contain only letters and numbers.');
+                            'ชื่อผู้ใช้ต้องมีอย่างน้อย 6 ตัวอักษรและประกอบด้วยตัวอักษรและตัวเลขเท่านั้น');
                         return;
                       }
 
                       if (!isValidPassword(password)) {
                         _showErrorDialog(context,
-                            'Password must be at least 8 characters long and contain only letters and numbers.');
+                            'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษรและประกอบด้วยตัวอักษรและตัวเลขเท่านั้น');
                         return;
                       }
 
                       if (password != confirmPassword) {
-                        _showErrorDialog(context, 'Passwords do not match.');
+                        _showErrorDialog(context, 'การยืนยันรหัสผ่านไม่ถูกต้อง');
                         return;
                       }
 
@@ -198,7 +198,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     },
               child: _isLoading
                   ? CircularProgressIndicator(color: Colors.white)
-                  : Text("Submit"),
+                  : Text("ลงทะเบียน"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal,
                 foregroundColor: Colors.white,

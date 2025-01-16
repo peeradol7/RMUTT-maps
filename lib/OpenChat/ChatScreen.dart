@@ -282,7 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      labelText: 'Enter message',
+                      labelText: 'พิมพ์ข้อความ . . .',
                       labelStyle: TextStyle(color: Colors.teal),
                     ),
                   ),

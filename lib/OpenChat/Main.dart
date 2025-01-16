@@ -65,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 const SizedBox(height: 15),
                 const Text(
-                  "Log in to access the community system.",
+                  "เข้าสู่ระบบเพื่อเข้าใช้งานระบบ OpenChat",
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,

@@ -197,7 +197,7 @@ class _InputPhoneNumberScreenState extends State<InputPhoneNumberScreen> {
                 TextField(
                   controller: _phoneController,
                   decoration: InputDecoration(
-                    labelText: "Phone Number",
+                    labelText: "กรอกหมายเลขโทรศัพท์",
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -227,7 +227,7 @@ class _InputPhoneNumberScreenState extends State<InputPhoneNumberScreen> {
                           child: CircularProgressIndicator(color: Colors.white),
                         )
                       : Text(
-                          "Send OTP",
+                          "ส่งรหัส OTP",
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold),
                         ),

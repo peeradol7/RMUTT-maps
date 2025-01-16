@@ -134,7 +134,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                           child: CircularProgressIndicator(color: Colors.white),
                         )
                       : Text(
-                          "Verify OTP",
+                          "ยืนยันรหัส OTP",
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold),
                         ),

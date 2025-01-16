@@ -49,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter username and password')),
+        SnackBar(content: Text('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน')),
       );
       return;
     }
@@ -109,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _usernameController,
                     decoration: InputDecoration(
-                      labelText: "Username",
+                      labelText: "กรอกชื่อผู้ใช้",
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -122,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _passwordController,
                     decoration: InputDecoration(
-                      labelText: "Password",
+                      labelText: "กรอกรหัสผ่าน",
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -143,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           });
                         },
                       ),
-                      Text("Remember me"),
+                      Text("จดจำฉัน"),
                       Spacer(),
                       TextButton(
                         onPressed: () {
@@ -155,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                         },
                         child: Text(
-                          "Forgot Password?",
+                          "ลืมรหัสผ่าน?",
                           style: TextStyle(color: Colors.blue),
                         ),
                       ),
@@ -173,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               strokeWidth: 2,
                             ),
                           )
-                        : Text("Login",
+                        : Text("เข้าสู่ระบบ",
                             style: TextStyle(
                                 fontSize: 18, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
