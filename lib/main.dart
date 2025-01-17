@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1268,9 +1269,14 @@ class MapSampleState extends State<MapSample> {
           startTrackingLocation2();
 
           final GoogleMapController controller = await _controller.future;
-          // Update zoom level to 20
           controller.animateCamera(
-            CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+            CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: _currentPosition!,
+                zoom: 18,
+                bearing: await _calculateBearing(),
+              ),
+            ),
           );
 
           setState(() {
@@ -1282,16 +1288,6 @@ class MapSampleState extends State<MapSample> {
       }
     } catch (e) {
       handleDirectionError(e);
-    }
-  }
-
-// Add this new method to keep the camera centered on current location
-  void _keepCameraCentered() async {
-    if (_isRouteActive && _currentPosition != null) {
-      final GoogleMapController controller = await _controller.future;
-      controller.animateCamera(
-        CameraUpdate.newLatLngZoom(_currentPosition!, 20),
-      );
     }
   }
 
@@ -1329,19 +1325,51 @@ class MapSampleState extends State<MapSample> {
     return distance;
   }
 
-// Update polyline on map
   void updateRoutePolyline(List<LatLng> points) {
+    if (!mounted) return;
+
     setState(() {
       _polylines.clear();
-      _polylines.add(
-        Polyline(
-          polylineId: const PolylineId('route'),
-          points: points,
-          color: Colors.blue,
-          width: 5,
-        ),
-      );
+      // สร้าง polyline ใหม่จากจุดปัจจุบันไปยังจุดหมาย
+      List<LatLng> remainingPoints = _getRemainingRoutePoints();
+      if (remainingPoints.isNotEmpty) {
+        _polylines.add(
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: remainingPoints,
+            color: Colors.blue,
+            width: 5,
+          ),
+        );
+      }
     });
+  }
+
+  List<LatLng> _getRemainingRoutePoints() {
+    if (_currentPosition == null || _fullRoutePoints.isEmpty) {
+      return _fullRoutePoints;
+    }
+
+    // หาจุดที่ใกล้ที่สุดบน route
+    int closestPointIndex = 0;
+    double minDistance = double.infinity;
+
+    for (int i = 0; i < _fullRoutePoints.length; i++) {
+      double distance = _calculateDistance(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+        _fullRoutePoints[i].latitude,
+        _fullRoutePoints[i].longitude,
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestPointIndex = i;
+      }
+    }
+
+    // ตัดเอาเฉพาะเส้นทางที่เหลือ
+    return _fullRoutePoints.sublist(closestPointIndex);
   }
 
   void handleDirectionError(dynamic error) {
@@ -1395,14 +1423,71 @@ class MapSampleState extends State<MapSample> {
     _navigationLocationSubscription?.cancel();
     _navigationLocationSubscription =
         _locationStream?.listen((Position position) async {
+      if (!mounted) return;
+
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
       });
 
       if (_isRouteActive) {
-        _keepCameraCentered();
+        updateRoutePolyline(_fullRoutePoints);
+        await _keepCameraCentered();
       }
     });
+  }
+
+  Future<void> _keepCameraCentered() async {
+    if (!_isRouteActive || _currentPosition == null) return;
+
+    final GoogleMapController controller = await _controller.future;
+
+    // ล็อคมุมมองกล้องให้ติดตามตำแหน่งปัจจุบัน
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _currentPosition!,
+          zoom: 18,
+          tilt: 10,
+          bearing: await _calculateBearing(),
+        ),
+      ),
+    );
+  }
+
+  Future<double> _calculateBearing() async {
+    if (_currentPosition == null || _fullRoutePoints.isEmpty) return 0;
+
+    List<LatLng> remainingPoints = _getRemainingRoutePoints();
+    if (remainingPoints.length < 2) return 0;
+
+    LatLng nextPoint = remainingPoints[1];
+
+    double dy = nextPoint.longitude - _currentPosition!.longitude;
+    double dx = nextPoint.latitude - _currentPosition!.latitude;
+    double bearing = atan2(dy, dx) * 180 / pi;
+
+    return bearing;
+  }
+
+  double _calculateDistance(
+      double lat1, double lon1, double lat2, double lon2) {
+    const double earthRadius = 6371000; // รัศมีโลกในเมตร
+
+    double dLat = _toRadians(lat2 - lat1);
+    double dLon = _toRadians(lon2 - lon1);
+
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_toRadians(lat1)) *
+            cos(_toRadians(lat2)) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  double _toRadians(double degree) {
+    return degree * pi / 180;
   }
 
   void updateNavigationProgress2() async {

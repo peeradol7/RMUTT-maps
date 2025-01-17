@@ -36,10 +36,28 @@ class _LoginScreenState extends State<LoginScreen> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     bool? isLoggedIn = prefs.getBool('isLoggedIn');
     String? username = prefs.getString('username');
+    String? hashedPassword = prefs.getString('hashedPassword');
 
-    if (isLoggedIn == true && username != null) {
+    if (isLoggedIn == true && username != null && hashedPassword != null) {
       _usernameController.text = username;
       setState(() => _isRememberMeChecked = true);
+
+      // Auto login
+      try {
+        await _loginController.login(
+          username: username,
+          password: hashedPassword,
+          context: context,
+        );
+      } catch (e) {
+        // If auto-login fails, clear stored credentials
+        await prefs.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'การเข้าสู่ระบบอัตโนมัติล้มเหลว กรุณาเข้าสู่ระบบอีกครั้ง')),
+        );
+      }
     }
   }
 
@@ -61,8 +79,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (_isRememberMeChecked) {
         SharedPreferences prefs = await SharedPreferences.getInstance();
-        prefs.setString('username', username);
-        prefs.setBool('isLoggedIn', true);
+        await prefs.setString('username', username);
+        await prefs.setString('hashedPassword', hashedPassword);
+        await prefs.setBool('isLoggedIn', true);
       }
 
       await _loginController.login(
@@ -79,15 +98,54 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  @override
+  Future<void> _clearStoredCredentials() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    setState(() => _isRememberMeChecked = false);
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
+        // แก้ไขจาก AppBar เป็น appBar
         title: Text("Login"),
         foregroundColor: Colors.white,
         backgroundColor: Colors.teal,
         elevation: 0,
+        actions: [
+          if (_isRememberMeChecked)
+            IconButton(
+              icon: Icon(Icons.logout),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text('ยืนยันการออกจากระบบ'),
+                    content: Text('คุณต้องการออกจากระบบใช่หรือไม่?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('ยกเลิก'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await _clearStoredCredentials();
+                          _usernameController.clear();
+                          _passwordController.clear();
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('ออกจากระบบสำเร็จ')),
+                          );
+                        },
+                        child: Text('ยืนยัน'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
       ),
       body: SafeArea(
         child: Center(
@@ -173,9 +231,13 @@ class _LoginScreenState extends State<LoginScreen> {
                               strokeWidth: 2,
                             ),
                           )
-                        : Text("เข้าสู่ระบบ",
+                        : Text(
+                            "เข้าสู่ระบบ",
                             style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal,
                       foregroundColor: Colors.white,

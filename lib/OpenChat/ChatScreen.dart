@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:maps/OpenChat/Login.dart';
 import 'package:maps/OpenChat/model/usermodel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -128,9 +129,15 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _logout() {
-    Navigator.of(context).popUntil(
-        (route) => route.isFirst); // กลับไปที่หน้าก่อนหน้า หรือหน้าหลัก
+  void _logout() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    // นำทางไปยังหน้า Login
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => LoginScreen()),
+    );
   }
 
   @override
