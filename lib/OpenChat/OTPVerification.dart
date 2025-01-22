@@ -84,7 +84,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text("Verify OTP"),
-        backgroundColor: const Color.fromARGB(255, 4, 42, 73),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       ),
       body: SafeArea(
         child: Center(

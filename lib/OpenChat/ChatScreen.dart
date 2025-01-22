@@ -28,7 +28,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'message': message,
         'senderName': widget.user.name,
         'senderUsername': widget.user.username,
-        'senderPhoneNumber': widget.user.phoneNumber, // Add phoneNumber here
+        'senderPhoneNumber': widget.user.phoneNumber,
         'timestamp': FieldValue.serverTimestamp(),
       });
 

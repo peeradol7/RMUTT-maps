@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -20,16 +21,50 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isRememberMeChecked = false;
   bool _isLoading = false;
 
+  int _failedAttempts = 0;
+  Timer? _cooldownTimer;
+  DateTime? _cooldownEndTime;
   String hashPassword(String password) {
     final bytes = utf8.encode(password);
     final hash = sha256.convert(bytes);
     return hash.toString();
   }
 
+  Future<void> _loadFailedAttempts() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    _failedAttempts = prefs.getInt('failedAttempts') ?? 0;
+    String? cooldownEnd = prefs.getString('cooldownEndTime');
+    if (cooldownEnd != null) {
+      _cooldownEndTime = DateTime.tryParse(cooldownEnd);
+      if (_cooldownEndTime != null &&
+          DateTime.now().isBefore(_cooldownEndTime!)) {
+        _startCooldownTimer();
+      } else {
+        await prefs.remove('cooldownEndTime');
+      }
+    }
+  }
+
+  void _startCooldownTimer() {
+    if (_cooldownEndTime != null) {
+      _cooldownTimer?.cancel();
+      final duration = _cooldownEndTime!.difference(DateTime.now());
+      _cooldownTimer = Timer(duration, () {
+        setState(() {
+          _failedAttempts = 0;
+          _cooldownEndTime = null;
+        });
+      });
+      setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _checkLoginStatus();
+    _loadFailedAttempts();
+    _cooldownTimer?.cancel();
   }
 
   Future<void> _checkLoginStatus() async {
@@ -41,8 +76,6 @@ class _LoginScreenState extends State<LoginScreen> {
     if (isLoggedIn == true && username != null && hashedPassword != null) {
       _usernameController.text = username;
       setState(() => _isRememberMeChecked = true);
-
-      // Auto login
       try {
         await _loginController.login(
           username: username,
@@ -50,7 +83,6 @@ class _LoginScreenState extends State<LoginScreen> {
           context: context,
         );
       } catch (e) {
-        // If auto-login fails, clear stored credentials
         await prefs.clear();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -62,6 +94,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
+    if (_cooldownEndTime != null &&
+        DateTime.now().isBefore(_cooldownEndTime!)) {
+      final remaining = _cooldownEndTime!.difference(DateTime.now());
+      _showCooldownDialog(remaining);
+      return;
+    }
+
     String username = _usernameController.text.trim();
     String password = _passwordController.text.trim();
 
@@ -71,31 +110,69 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
-
     setState(() => _isLoading = true);
 
     try {
       String hashedPassword = hashPassword(password);
-
-      if (_isRememberMeChecked) {
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('username', username);
-        await prefs.setString('hashedPassword', hashedPassword);
-        await prefs.setBool('isLoggedIn', true);
-      }
-
-      await _loginController.login(
+      final isLoginSuccessful = await _loginController.login(
         username: username,
         password: hashedPassword,
         context: context,
       );
+
+      if (isLoginSuccessful) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.remove('failedAttempts');
+        await prefs.remove('cooldownEndTime');
+        _failedAttempts = 0;
+      } else {
+        setState(() => _failedAttempts += 1);
+        if (_failedAttempts >= 3) {
+          _startCooldown();
+        }
+      }
     } catch (e) {
+      setState(() => _failedAttempts += 1);
+      if (_failedAttempts >= 3) {
+        _startCooldown();
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Login failed: ${e.toString()}')),
       );
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _startCooldown() async {
+    _cooldownEndTime = DateTime.now().add(Duration(minutes: 5));
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('failedAttempts', _failedAttempts);
+    await prefs.setString(
+        'cooldownEndTime', _cooldownEndTime!.toIso8601String());
+    _startCooldownTimer();
+    final remaining = _cooldownEndTime!.difference(DateTime.now());
+    _showCooldownDialog(remaining);
+  }
+
+  void _showCooldownDialog(Duration remaining) {
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds % 60;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('การล็อคอินถูกระงับ'),
+        content: Text(
+            'คุณป้อนรหัสผิดครบ 3 ครั้ง กรุณารอ $minutes:${seconds.toString().padLeft(2, '0')}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('ตกลง'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _clearStoredCredentials() async {

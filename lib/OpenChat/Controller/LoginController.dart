@@ -18,7 +18,7 @@ class LoginController {
     return hash.toString();
   }
 
-  Future<void> login({
+  Future<bool> login({
     required String username,
     required String password,
     required BuildContext context,
@@ -39,7 +39,6 @@ class LoginController {
         print('Stored Password: $storedPassword');
         print('Login Password: $password');
 
-        // เปรียบเทียบโดยตรง ไม่ต้อง hash ซ้ำ
         if (storedPassword == password) {
           UserModel user = UserModel(
             userId: userDoc['userId'],
@@ -58,34 +57,38 @@ class LoginController {
               builder: (context) => ChatScreen(user: user),
             ),
           );
+          return true;
         } else {
           _showErrorDialog(context, 'Incorrect password. Please try again.');
+          return false;
         }
       } else {
         _showErrorDialog(context, 'Username not found. Please try again.');
+        return false;
       }
     } catch (e) {
       print('Error during login: $e');
       _showErrorDialog(context, 'An error occurred. Please try again later.');
+      return false;
     }
   }
+}
 
-  void _showErrorDialog(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title:
-            Text('Login Failed', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(message),
-        actions: <Widget>[
-          TextButton(
-            child: Text('Okay', style: TextStyle(color: Colors.blue)),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
-          )
-        ],
-      ),
-    );
-  }
+void _showErrorDialog(BuildContext context, String message) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title:
+          Text('Login Failed', style: TextStyle(fontWeight: FontWeight.bold)),
+      content: Text(message),
+      actions: <Widget>[
+        TextButton(
+          child: Text('Okay', style: TextStyle(color: Colors.blue)),
+          onPressed: () {
+            Navigator.of(ctx).pop();
+          },
+        )
+      ],
+    ),
+  );
 }

@@ -149,7 +149,7 @@ class _InputPhoneNumberScreenState extends State<InputPhoneNumberScreen> {
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         title: Text("Register"),
-        backgroundColor: const Color.fromARGB(255, 4, 42, 73),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       ),
       body: SafeArea(
         child: Center(

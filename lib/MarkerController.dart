@@ -32,14 +32,11 @@ class MarkerController {
     BitmapDescriptor? icon,
     Function(LatLng)? onTap,
   }) {
-    // หาดัชนีของมาร์คเกอร์ที่ต้องการอัพเดท
     final index = _markers.indexWhere((marker) => marker.markerId.value == id);
 
     if (index != -1) {
       // ดึงมาร์คเกอร์เดิม
       final oldMarker = _markers[index];
-
-      // สร้างมาร์คเกอร์ใหม่โดยรักษาค่าเดิมที่ไม่ได้อัพเดท
       _markers[index] = Marker(
         markerId: MarkerId(id),
         position: position,
