@@ -19,14 +19,7 @@ import 'package:sliding_up_panel/sliding_up_panel.dart';
 void main() async {
   runApp(const MyApp());
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: FirebaseOptions(
-        apiKey: "AIzaSyCOoGxWlgYEFg9LQUVieOITKZi27LQCGMg",
-        appId: "1:166629524832:android:d2bccd985c1d58fb85ca05",
-        messagingSenderId: "166629524832",
-        projectId: "mapdatabase-f3797",
-        storageBucket: "mapdatabase-f3797.appspot.com"),
-  );
+  await Firebase.initializeApp();
 }
 
 class MyApp extends StatelessWidget {
