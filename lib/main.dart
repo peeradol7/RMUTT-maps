@@ -121,7 +121,9 @@ class MapSampleState extends State<MapSample> {
     _panelController = PanelController();
     _setMarkerIcon();
     _initializeIcons();
-    _requestLocationPermission();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestLocationPermission(context);
+    });
   }
 
   Future<void> _initializeIcons() async {
@@ -373,7 +375,9 @@ class MapSampleState extends State<MapSample> {
           IconButton(
             icon: Icon(Icons.gps_fixed),
             onPressed: () {
-              _requestLocationPermission();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _requestLocationPermission(context);
+              });
             },
           ),
         ],
@@ -723,12 +727,29 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  Future<void> _requestLocationPermission() async {
+  Future<void> _requestLocationPermission(BuildContext context) async {
     bool serviceEnabled;
     LocationPermission permission;
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('กรุณาเปิด GPS'),
+            content: Text('กรุณาเปิด GPS บนอุปกรณ์ของคุณ'),
+            actions: <Widget>[
+              TextButton(
+                child: Text('ตกลง'),
+                onPressed: () {
+                  Navigator.of(context).pop(); // ปิด Dialog
+                },
+              ),
+            ],
+          );
+        },
+      );
       return Future.error('Location services are disabled.');
     }
 
@@ -746,78 +767,6 @@ class MapSampleState extends State<MapSample> {
     }
 
     startTrackingLocation();
-  }
-
-  void _updateRouteProgress(LatLng currentPosition, LatLng destination) {
-    if (_steps.isEmpty || _polylineCoordinates.isEmpty) {
-      print('DEBUG: Steps or polyline coordinates are empty');
-      return;
-    }
-
-    final double passThreshold = 30.0;
-    final double arrivalThreshold = 10.0;
-
-    int closestPolylineIndex = 0;
-    double minDistance = double.infinity;
-
-    for (int i = 0; i < _polylineCoordinates.length; i++) {
-      double distance = Geolocator.distanceBetween(
-        currentPosition.latitude,
-        currentPosition.longitude,
-        _polylineCoordinates[i].latitude,
-        _polylineCoordinates[i].longitude,
-      );
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestPolylineIndex = i;
-      }
-    }
-
-    if (minDistance <= passThreshold) {
-      setState(() {
-        // Update passed steps
-        for (var step in _steps) {
-          if (step['start_index'] <= closestPolylineIndex) {
-            step['passed'] = true;
-          }
-        }
-
-        if (closestPolylineIndex < _polylineCoordinates.length - 1) {
-          _polylineCoordinates =
-              _polylineCoordinates.sublist(closestPolylineIndex);
-          final int offset = closestPolylineIndex;
-          for (var step in _steps) {
-            if (!step['passed']) {
-              int newStartIndex = (step['start_index'] as int) - offset;
-              step['start_index'] = newStartIndex < 0 ? 0 : newStartIndex;
-
-              int newEndIndex = (step['end_index'] as int) - offset;
-              step['end_index'] = newEndIndex < 0 ? 0 : newEndIndex;
-              step['coordinates'] =
-                  (step['coordinates'] as List<LatLng>).where((coord) {
-                int coordIndex = _polylineCoordinates.indexOf(coord);
-                return coordIndex != -1;
-              }).toList();
-            }
-          }
-        }
-      });
-    }
-
-    // Check for arrival
-    double distanceToDestination = Geolocator.distanceBetween(
-      currentPosition.latitude,
-      currentPosition.longitude,
-      destination.latitude,
-      destination.longitude,
-    );
-
-    if (distanceToDestination <= arrivalThreshold && !_hasShownArrivalDialog) {
-      _showArrivalDialog();
-      _hasShownArrivalDialog = true;
-      stopTrackingLocation();
-    }
   }
 
   void resetRouteRequest() {
@@ -1342,13 +1291,13 @@ class MapSampleState extends State<MapSample> {
           final leg = route['legs'][0];
           String encodedPoints = route['overview_polyline']['points'];
 
-          // Decode the points
+          // Decode the full route points
           _fullRoutePoints = decodePolyline(encodedPoints)
               .map((point) => LatLng(point[0], point[1]))
               .toList();
 
-          // Set the polyline coordinates
-          _polylineCoordinates = List.from(_fullRoutePoints);
+          // Sample points every 5 meters
+          _polylineCoordinates = _samplePointsEvery5Meters(_fullRoutePoints);
 
           // Create the polyline
           setState(() {
@@ -1377,11 +1326,112 @@ class MapSampleState extends State<MapSample> {
             _routeDuration = leg['duration']['text'];
             _isLoadingRoute = false;
           });
+
+          // Start checking for route completion
+          _startRouteCompletionCheck();
         }
       }
     } catch (e) {
       handleDirectionError(e);
     }
+  }
+
+  void _updatePolylineBasedOnCurrentPosition() {
+    // ลอจิกสำหรับอัพเดทจุด polyline เมื่อตำแหน่งปัจจุบันเปลี่ยน
+    if (_currentPosition != null) {
+      // ตรวจสอบและลบจุดที่ผ่านไปแล้ว
+      _polylineCoordinates.removeWhere((point) =>
+              _calculateDistanc(
+                  _currentPosition!.latitude,
+                  _currentPosition!.longitude,
+                  point.latitude,
+                  point.longitude) <
+              20 // ลบจุดที่ห่างน้อยกว่า 20 เมตร
+          );
+    }
+  }
+
+  void _startRouteCompletionCheck() {
+    Timer.periodic(Duration(seconds: 1), (timer) {
+      // ลดเวลาเหลือ 1 วินาที
+      if (!_isNavigating) {
+        timer.cancel();
+        return;
+      }
+
+      // อัพเดทจุด polyline บ่อยขึ้น
+      _updatePolylineBasedOnCurrentPosition();
+
+      // ตรวจสอบการเข้าใกล้จุดหมาย
+      if (_isNearDestination(_currentPosition, _polylineCoordinates.last)) {
+        timer.cancel();
+        _handleArrival();
+      }
+    });
+  }
+
+  bool _isNearDestination(LatLng? currentPos, LatLng destinationPos) {
+    if (currentPos == null) return false;
+    const double threshold = 0.0002;
+
+    double distance = _calculateDistanc(
+        currentPos.latitude,
+        currentPos.longitude,
+        destinationPos.latitude,
+        destinationPos.longitude);
+
+    return distance <= 20;
+  }
+
+  List<LatLng> _samplePointsEvery5Meters(List<LatLng> fullPoints) {
+    if (fullPoints.isEmpty) return [];
+
+    List<LatLng> sampledPoints = [fullPoints.first];
+    double accumulatedDistance = 0;
+
+    for (int i = 1; i < fullPoints.length; i++) {
+      double segmentDistance = _calculateDistanc(
+          fullPoints[i - 1].latitude,
+          fullPoints[i - 1].longitude,
+          fullPoints[i].latitude,
+          fullPoints[i].longitude);
+
+      accumulatedDistance += segmentDistance;
+
+      if (accumulatedDistance >= 0.005) {
+        // Approximately 5 meters
+        sampledPoints.add(fullPoints[i]);
+        accumulatedDistance = 0;
+      }
+    }
+
+    // Ensure the last point is always included
+    if (sampledPoints.last != fullPoints.last) {
+      sampledPoints.add(fullPoints.last);
+    }
+
+    return sampledPoints;
+  }
+
+  double _calculateDistanc(double lat1, double lon1, double lat2, double lon2) {
+    const double earthRadius = 6371000; // meters
+
+    double dLat = _degreesToRadians(lat2 - lat1);
+    double dLon = _degreesToRadians(lon2 - lon1);
+
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_degreesToRadians(lat1)) *
+            cos(_degreesToRadians(lat2)) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return earthRadius * c;
+  }
+
+  double _degreesToRadians(double degrees) {
+    return degrees * (pi / 180);
   }
 
   int findClosestPointOnRoute(LatLng currentPosition) {
