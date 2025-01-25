@@ -31,7 +31,7 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         home: MapSample(),
-        title: 'RMUTT Map',
+        title: 'RMUTT Nav',
         theme: ThemeData(
           primarySwatch: Colors.lightBlue,
         ),

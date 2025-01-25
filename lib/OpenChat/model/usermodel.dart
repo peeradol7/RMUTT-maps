@@ -25,12 +25,10 @@ class UserModel {
     );
   }
 
-  // แปลงข้อมูลเป็น Map สำหรับบันทึกไป Firestore
   Map<String, dynamic> toJson() {
     return {
       'username': username,
       'name': name,
-      'password': password,
       'phoneNumber': phoneNumber,
     };
   }
