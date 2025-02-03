@@ -65,13 +65,21 @@ android {
             force 'com.google.android.gms:play-services-location:21.3.0'
         }
     }
+        signingConfigs {
+        release {
+            keyAlias 'upload'
+            keyPassword '029024142'
+            storeFile file('C:/Users/Windows 10/upload-keystore.jks')
+            storePassword '029024142'
+        }
+    }
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             shrinkResources false
-            minifyEnabled true //ก่อนหน้า falseกก
+            minifyEnabled true 
             
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'//ลบได้
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
 }

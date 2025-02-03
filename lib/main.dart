@@ -11,8 +11,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:maps/DirectionController.dart';
+import 'package:maps/DirectionService.dart';
 import 'package:maps/MarkerController.dart';
 import 'package:maps/OpenChat/Main.dart';
+import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
@@ -62,9 +64,7 @@ class MapSampleState extends State<MapSample> {
   bool _isNavigating = false;
   List<LatLng> _polylineCoordinates = [];
   bool _hasShownArrivalDialog = false;
-  bool _walkMode = true;
   Stream<Position>? _locationStream;
-  bool _carMode = false;
   late PanelController _panelController;
   bool _showPanel = false;
   double travelDuration = 0.0;
@@ -96,7 +96,7 @@ class MapSampleState extends State<MapSample> {
   String? _routeDistance;
   String? _routeDuration;
   String? _savedDestinationName;
-
+  final QuestionnaireDialogHelper questionnaire = QuestionnaireDialogHelper();
   BitmapDescriptor _sportIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _seven = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
@@ -391,6 +391,12 @@ class MapSampleState extends State<MapSample> {
                   MaterialPageRoute(builder: (context) => WelcomeScreen()),
                 );
               },
+            ),
+            IconButton(
+              icon: Icon(Icons.assessment),
+              onPressed: () {
+                QuestionnaireDialogHelper.show(context);
+              },
             )
           ],
         ),
@@ -429,90 +435,6 @@ class MapSampleState extends State<MapSample> {
                     color: Colors.black26,
                     blurRadius: 4,
                     offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _carMode = true;
-                        _walkMode = false;
-                        if (_currentPosition != null &&
-                            _destinationLatLng != null) {
-                          _polylines.clear();
-                          directionApiFromgoogleApi(_currentPosition!,
-                              _destinationLatLng!, _destination!);
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _carMode ? Colors.blue : Colors.white,
-                        borderRadius:
-                            BorderRadius.horizontal(left: Radius.circular(20)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.directions_car,
-                            color: _carMode ? Colors.white : Colors.grey,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'รถ',
-                            style: TextStyle(
-                              color: _carMode ? Colors.white : Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Walking mode switch
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _walkMode = true;
-                        _carMode = false;
-                        // If there's an active route, recalculate it
-                        if (_currentPosition != null &&
-                            _destinationLatLng != null) {
-                          _polylines.clear();
-                          _fetchRouteFromApiOnce(_currentPosition!,
-                              _destinationLatLng!, _destination!);
-                          _startPeriodicRouteUpdates();
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _walkMode ? Colors.blue : Colors.white,
-                        borderRadius:
-                            BorderRadius.horizontal(right: Radius.circular(20)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.directions_walk,
-                            color: _walkMode ? Colors.white : Colors.grey,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'เดิน',
-                            style: TextStyle(
-                              color: _walkMode ? Colors.white : Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -971,17 +893,45 @@ class MapSampleState extends State<MapSample> {
                     CameraUpdate.newLatLngZoom(_currentPosition!, 20),
                   );
 
-                  if (_walkMode) {
-                    _fetchRouteFromApiOnce(
-                        _currentPosition!, endLocation, destination);
-                    _startPeriodicRouteUpdates();
-                  } else {
-                    directionApiFromgoogleApi(
-                        _currentPosition!, endLocation, destination);
-                  }
+                  // Fetch route and update polylines
+                  List<LatLng> route = await DirectionService.getRoute(
+                      _currentPosition!, endLocation, destination);
+
+                  if (route.isNotEmpty) {
+                    setState(() {
+                      _polylines = {
+                        Polyline(
+                          polylineId: PolylineId('route'),
+                          points: route,
+                          color: Colors.blue,
+                          width: 5,
+                        )
+                      };
+                    });
+                  } else {}
                 }
               },
-              child: Text('ใช่'),
+              child: Text('เดินทางด้วยรถ'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                if (_currentPosition != null) {
+                  _savedDestination = endLocation;
+                  _savedDestinationName = destination;
+                  _isRouteActive = true;
+                  final GoogleMapController controller =
+                      await _controller.future;
+                  controller.animateCamera(
+                    CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+                  );
+
+                  _fetchRouteFromApiOnce(
+                      _currentPosition!, endLocation, destination);
+                  _startPeriodicRouteUpdates();
+                }
+              },
+              child: Text('เดินทางด้วยการเดิน'),
             ),
             TextButton(
               onPressed: () {
@@ -1260,7 +1210,7 @@ class MapSampleState extends State<MapSample> {
     });
 
     try {
-      final String apiKey = 'AIzaSyBiBXvhX4YenKelpFUA30_R5p_OVkbHy8o';
+      final String apiKey = 'AIzaSyCOoGxWlgYEFg9LQUVieOITKZi27LQCGMg';
       final String baseUrl =
           'https://maps.googleapis.com/maps/api/directions/json';
       final response = await http.get(
