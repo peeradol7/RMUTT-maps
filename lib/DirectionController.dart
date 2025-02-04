@@ -5,11 +5,11 @@ import 'package:http/http.dart' as http;
 
 class DirectionController {
   final Function(List<LatLng>, List<Map<String, dynamic>>) onRouteFetched;
-  final Function() onArrivalDetected; // Add new callback for arrival
+  final Function() onArrivalDetected;
 
   DirectionController({
     required this.onRouteFetched,
-    required this.onArrivalDetected, // Add to constructor
+    required this.onArrivalDetected,
   });
 
   Future<void> fetchAndCalculateRoutes(LatLng start, LatLng end) async {

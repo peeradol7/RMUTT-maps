@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -9,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'package:maps/DirectionController.dart';
 import 'package:maps/DirectionService.dart';
 import 'package:maps/MarkerController.dart';
@@ -96,6 +94,9 @@ class MapSampleState extends State<MapSample> {
   String? _routeDistance;
   String? _routeDuration;
   String? _savedDestinationName;
+  LatLng? _lastUpdatedPosition;
+
+  LatLng? _endLocation;
   final QuestionnaireDialogHelper questionnaire = QuestionnaireDialogHelper();
   BitmapDescriptor _sportIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _seven = BitmapDescriptor.defaultMarker;
@@ -104,7 +105,7 @@ class MapSampleState extends State<MapSample> {
   String _destination = '';
   List<Marker> _markers = [];
   List<Map<String, dynamic>> _steps = [];
-
+  late LatLng newPosition;
   double _travelDuration = 0.0;
   StreamSubscription<Position>? _locationSubscription;
   List<LatLng> _currentPolylinePoints = [];
@@ -798,7 +799,7 @@ class MapSampleState extends State<MapSample> {
         accuracy: LocationAccuracy.best,
         distanceFilter: 0,
       ),
-    ).listen((Position position) {
+    ).listen((Position position) async {
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
       });
@@ -807,9 +808,60 @@ class MapSampleState extends State<MapSample> {
         _moveCameraToPosition(_currentPosition!);
         _cameraMoved = true;
       }
+      if (_isRouteActive && _savedDestination != null) {
+        try {
+          List<LatLng> updatedRoute = await DirectionService.getRoute(
+              _currentPosition!,
+              _savedDestination!,
+              _savedDestinationName ?? 'Destination');
 
-      _updatePolyline();
+          if (updatedRoute.isNotEmpty) {
+            setState(() {
+              _polylines = {
+                Polyline(
+                  polylineId: PolylineId('route'),
+                  points: updatedRoute,
+                  color: Colors.blue,
+                  width: 5,
+                  geodesic: true,
+                )
+              };
+            });
+          }
+        } catch (e) {
+          print("Error updating route: $e");
+        }
+      }
     });
+  }
+
+  // _updatePolyline();
+  Future<void> updateRoute() async {
+    if (_currentPosition == null || _endLocation == null) return;
+
+    try {
+      List<LatLng> newRoute = await DirectionService.getRoute(
+          _currentPosition!, _endLocation!, 'Destination');
+
+      if (newRoute.isNotEmpty) {
+        if (_polylines.isEmpty || _polylines.first.points != newRoute) {
+          setState(() {
+            _polylines = {
+              Polyline(
+                polylineId: PolylineId('route'),
+                points: newRoute,
+                color: Colors.blue,
+                width: 5,
+                geodesic:
+                    true, // เพิ่มบรรทัดนี้หากต้องการให้เส้นทางมีลักษณะโค้ง
+              )
+            };
+          });
+        }
+      }
+    } catch (e) {
+      print('Error updating route: $e');
+    }
   }
 
   void stopTrackingLocation() {
@@ -893,22 +945,27 @@ class MapSampleState extends State<MapSample> {
                     CameraUpdate.newLatLngZoom(_currentPosition!, 20),
                   );
 
-                  // Fetch route and update polylines
                   List<LatLng> route = await DirectionService.getRoute(
                       _currentPosition!, endLocation, destination);
 
                   if (route.isNotEmpty) {
-                    setState(() {
-                      _polylines = {
-                        Polyline(
-                          polylineId: PolylineId('route'),
-                          points: route,
-                          color: Colors.blue,
-                          width: 5,
-                        )
-                      };
-                    });
-                  } else {}
+                    if (_polylines.isEmpty ||
+                        _polylines.first.points != route) {
+                      setState(() {
+                        _polylines = {
+                          Polyline(
+                            polylineId: PolylineId('route'),
+                            points: route,
+                            color: Colors.blue,
+                            width: 5,
+                            geodesic: true,
+                          )
+                        };
+                      });
+                    }
+                  } else {
+                    // สามารถเพิ่มการจัดการกรณีเส้นทางว่างได้ที่นี่
+                  }
                 }
               },
               child: Text('เดินทางด้วยรถ'),
@@ -1197,184 +1254,6 @@ class MapSampleState extends State<MapSample> {
         };
       }
     });
-  }
-
-  Future<void> directionApiFromgoogleApi(
-      LatLng origin, LatLng destination, String destinationName) async {
-    if (!_isRouteActive) return;
-
-    setState(() {
-      _isLoadingRoute = true;
-      _showPanel = true;
-      _isNavigating = true;
-    });
-
-    try {
-      final String apiKey = 'AIzaSyCOoGxWlgYEFg9LQUVieOITKZi27LQCGMg';
-      final String baseUrl =
-          'https://maps.googleapis.com/maps/api/directions/json';
-      final response = await http.get(
-        Uri.parse('$baseUrl?'
-            'origin=${origin.latitude},${origin.longitude}'
-            '&destination=${destination.latitude},${destination.longitude}'
-            '&mode=driving'
-            '&language=th'
-            '&key=$apiKey'),
-      );
-
-      if (response.statusCode == 200 && _isRouteActive) {
-        final decodedResponse = json.decode(response.body);
-        if (decodedResponse['status'] == 'OK') {
-          setState(() {
-            _polylines.clear();
-            _steps.clear();
-          });
-
-          final route = decodedResponse['routes'][0];
-          final leg = route['legs'][0];
-          String encodedPoints = route['overview_polyline']['points'];
-
-          // Decode the full route points
-          _fullRoutePoints = decodePolyline(encodedPoints)
-              .map((point) => LatLng(point[0], point[1]))
-              .toList();
-
-          // Sample points every 5 meters
-          _polylineCoordinates = _samplePointsEvery5Meters(_fullRoutePoints);
-
-          // Create the polyline
-          setState(() {
-            _polylines.add(
-              Polyline(
-                polylineId: PolylineId('route'),
-                points: _polylineCoordinates,
-                color: Colors.blue,
-                width: 5,
-              ),
-            );
-          });
-
-          final GoogleMapController controller = await _controller.future;
-          controller.animateCamera(
-            CameraUpdate.newCameraPosition(
-              CameraPosition(
-                target: _currentPosition!,
-                zoom: 18,
-              ),
-            ),
-          );
-
-          setState(() {
-            _routeDistance = leg['distance']['text'];
-            _routeDuration = leg['duration']['text'];
-            _isLoadingRoute = false;
-          });
-
-          // Start checking for route completion
-          _startRouteCompletionCheck();
-        }
-      }
-    } catch (e) {
-      handleDirectionError(e);
-    }
-  }
-
-  void _updatePolylineBasedOnCurrentPosition() {
-    // ลอจิกสำหรับอัพเดทจุด polyline เมื่อตำแหน่งปัจจุบันเปลี่ยน
-    if (_currentPosition != null) {
-      // ตรวจสอบและลบจุดที่ผ่านไปแล้ว
-      _polylineCoordinates.removeWhere((point) =>
-              _calculateDistanc(
-                  _currentPosition!.latitude,
-                  _currentPosition!.longitude,
-                  point.latitude,
-                  point.longitude) <
-              20 // ลบจุดที่ห่างน้อยกว่า 20 เมตร
-          );
-    }
-  }
-
-  void _startRouteCompletionCheck() {
-    Timer.periodic(Duration(seconds: 1), (timer) {
-      // ลดเวลาเหลือ 1 วินาที
-      if (!_isNavigating) {
-        timer.cancel();
-        return;
-      }
-
-      // อัพเดทจุด polyline บ่อยขึ้น
-      _updatePolylineBasedOnCurrentPosition();
-
-      // ตรวจสอบการเข้าใกล้จุดหมาย
-      if (_isNearDestination(_currentPosition, _polylineCoordinates.last)) {
-        timer.cancel();
-        _handleArrival();
-      }
-    });
-  }
-
-  bool _isNearDestination(LatLng? currentPos, LatLng destinationPos) {
-    if (currentPos == null) return false;
-    const double threshold = 0.0002;
-
-    double distance = _calculateDistanc(
-        currentPos.latitude,
-        currentPos.longitude,
-        destinationPos.latitude,
-        destinationPos.longitude);
-
-    return distance <= 20;
-  }
-
-  List<LatLng> _samplePointsEvery5Meters(List<LatLng> fullPoints) {
-    if (fullPoints.isEmpty) return [];
-
-    List<LatLng> sampledPoints = [fullPoints.first];
-    double accumulatedDistance = 0;
-
-    for (int i = 1; i < fullPoints.length; i++) {
-      double segmentDistance = _calculateDistanc(
-          fullPoints[i - 1].latitude,
-          fullPoints[i - 1].longitude,
-          fullPoints[i].latitude,
-          fullPoints[i].longitude);
-
-      accumulatedDistance += segmentDistance;
-
-      if (accumulatedDistance >= 0.005) {
-        // Approximately 5 meters
-        sampledPoints.add(fullPoints[i]);
-        accumulatedDistance = 0;
-      }
-    }
-
-    // Ensure the last point is always included
-    if (sampledPoints.last != fullPoints.last) {
-      sampledPoints.add(fullPoints.last);
-    }
-
-    return sampledPoints;
-  }
-
-  double _calculateDistanc(double lat1, double lon1, double lat2, double lon2) {
-    const double earthRadius = 6371000; // meters
-
-    double dLat = _degreesToRadians(lat2 - lat1);
-    double dLon = _degreesToRadians(lon2 - lon1);
-
-    double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_degreesToRadians(lat1)) *
-            cos(_degreesToRadians(lat2)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
-
-    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-
-    return earthRadius * c;
-  }
-
-  double _degreesToRadians(double degrees) {
-    return degrees * (pi / 180);
   }
 
   int findClosestPointOnRoute(LatLng currentPosition) {

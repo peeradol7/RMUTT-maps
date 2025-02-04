@@ -21,13 +21,11 @@ class DirectionService {
       if (response.statusCode == 200) {
         var data = json.decode(response.body);
 
-        // Check if features exists and has at least one feature
         if (data['features'] == null || data['features'].isEmpty) {
           print("No routes found in the response");
           return [];
         }
 
-        // The first feature contains the geometry
         var geometry = data['features'][0]['geometry'];
 
         if (geometry == null || geometry['coordinates'] == null) {
@@ -37,7 +35,6 @@ class DirectionService {
 
         List<dynamic> coordinates = geometry['coordinates'];
 
-        // Convert coordinates
         return coordinates
             .map((point) {
               if (point is List && point.length >= 2) {
