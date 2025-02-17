@@ -24,12 +24,28 @@ class UserModel {
       phoneNumber: doc['phoneNumber'],
     );
   }
+  bool get isNotEmpty {
+    return name.isNotEmpty &&
+        username.isNotEmpty; // You can check more fields here
+  }
+
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    return UserModel(
+      userId: json['userId'],
+      username: json['username'],
+      name: json['name'],
+      password: json['password'],
+      phoneNumber: json['phoneNumber'],
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
+      'userId': userId,
       'username': username,
       'name': name,
       'phoneNumber': phoneNumber,
+      'password': password,
     };
   }
 }

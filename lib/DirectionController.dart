@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert'; // สำหรับแปลง JSON
 
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -13,7 +14,6 @@ class DirectionController {
   });
 
   Future<void> fetchAndCalculateRoutes(LatLng start, LatLng end) async {
-    print('\n--- API Request Debug ---');
     print('Start point: ${start.latitude}, ${start.longitude}');
     print('End point: ${end.latitude}, ${end.longitude}');
 
@@ -34,9 +34,7 @@ class DirectionController {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final path = data['path'] as List;
-        final totalDistance =
-            data['total_distance'] as double; // Extract total_distance
-
+        final totalDistance = data['total_distance'] as double;
         print('Received path points: ${path.length}');
         print('Total distance: $totalDistance');
 
@@ -64,10 +62,8 @@ class DirectionController {
 
         print('Generated steps: ${steps.length}');
         print('----------------------\n');
-
-        // Check if we've arrived (total_distance <= 0.085)
         if (totalDistance <= 0.055) {
-          onArrivalDetected(); // Trigger arrival callback
+          onArrivalDetected();
         }
 
         onRouteFetched(polylineCoordinates, steps);

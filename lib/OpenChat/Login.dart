@@ -7,6 +7,7 @@ import 'package:maps/OpenChat/forgotPassword/ForgotPasswordScreen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import './Controller/LoginController.dart';
+import 'ChatScreen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -24,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
   int _failedAttempts = 0;
   Timer? _cooldownTimer;
   DateTime? _cooldownEndTime;
+
   String hashPassword(String password) {
     final bytes = utf8.encode(password);
     final hash = sha256.convert(bytes);
@@ -62,42 +64,14 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
     _loadFailedAttempts();
     _cooldownTimer?.cancel();
-  }
-
-  Future<void> _checkLoginStatus() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool? isLoggedIn = prefs.getBool('isLoggedIn');
-    String? username = prefs.getString('username');
-    String? hashedPassword = prefs.getString('hashedPassword');
-
-    if (isLoggedIn == true && username != null && hashedPassword != null) {
-      _usernameController.text = username;
-      setState(() => _isRememberMeChecked = true);
-      try {
-        await _loginController.login(
-          username: username,
-          password: hashedPassword,
-          context: context,
-        );
-      } catch (e) {
-        await prefs.clear();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'การเข้าสู่ระบบอัตโนมัติล้มเหลว กรุณาเข้าสู่ระบบอีกครั้ง')),
-        );
-      }
-    }
   }
 
   Future<void> _login() async {
     if (_cooldownEndTime != null &&
         DateTime.now().isBefore(_cooldownEndTime!)) {
-      final remaining = _cooldownEndTime!.difference(DateTime.now());
-      _showCooldownDialog(remaining);
+      _showCooldownDialog();
       return;
     }
 
@@ -110,61 +84,60 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
+
     setState(() => _isLoading = true);
 
     try {
-      String hashedPassword = hashPassword(password);
-      final isLoginSuccessful = await _loginController.login(
+      final userModel = await _loginController.login(
         username: username,
-        password: hashedPassword,
+        password: password,
         context: context,
       );
 
-      if (isLoginSuccessful) {
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.remove('failedAttempts');
-        await prefs.remove('cooldownEndTime');
-        _failedAttempts = 0;
+      if (userModel != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => ChatScreen()),
+        );
       } else {
-        setState(() => _failedAttempts += 1);
-        if (_failedAttempts >= 3) {
-          _startCooldown();
-        }
+        setState(() {
+          _failedAttempts++;
+          if (_failedAttempts >= 3) {
+            _startCooldown();
+          }
+        });
       }
     } catch (e) {
-      setState(() => _failedAttempts += 1);
-      if (_failedAttempts >= 3) {
-        _startCooldown();
-      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: ${e.toString()}')),
+        SnackBar(content: Text('เกิดข้อผิดพลาด: $e')),
       );
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _startCooldown() async {
-    _cooldownEndTime = DateTime.now().add(Duration(minutes: 5));
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('failedAttempts', _failedAttempts);
-    await prefs.setString(
-        'cooldownEndTime', _cooldownEndTime!.toIso8601String());
-    _startCooldownTimer();
-    final remaining = _cooldownEndTime!.difference(DateTime.now());
-    _showCooldownDialog(remaining);
+  void _startCooldown() {
+    setState(() {
+      _cooldownEndTime = DateTime.now().add(Duration(minutes: 5));
+    });
+    _showCooldownDialog();
   }
 
-  void _showCooldownDialog(Duration remaining) {
+  void _showCooldownDialog() {
+    if (_cooldownEndTime == null) return;
+
+    final remaining = _cooldownEndTime!.difference(DateTime.now());
     final minutes = remaining.inMinutes;
     final seconds = remaining.inSeconds % 60;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text('การล็อคอินถูกระงับ'),
         content: Text(
-            'คุณป้อนรหัสผิดครบ 3 ครั้ง กรุณารอ $minutes:${seconds.toString().padLeft(2, '0')}'),
+          'คุณป้อนรหัสผิดครบ 3 ครั้ง กรุณารอ $minutes:${seconds.toString().padLeft(2, '0')}',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -175,17 +148,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _clearStoredCredentials() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    setState(() => _isRememberMeChecked = false);
-  }
-
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
-        // แก้ไขจาก AppBar เป็น appBar
         title: Text("Login"),
         foregroundColor: Colors.white,
         backgroundColor: Colors.teal,
@@ -207,7 +173,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       TextButton(
                         onPressed: () async {
-                          await _clearStoredCredentials();
                           _usernameController.clear();
                           _passwordController.clear();
                           Navigator.pop(context);
@@ -270,15 +235,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(height: 10),
                   Row(
                     children: [
-                      Checkbox(
-                        value: _isRememberMeChecked,
-                        onChanged: (bool? value) {
-                          setState(() {
-                            _isRememberMeChecked = value ?? false;
-                          });
-                        },
-                      ),
-                      Text("จดจำฉัน"),
+                      // Checkbox(
+                      //   value: _isRememberMeChecked,
+                      //   onChanged: (bool? value) {
+                      //     setState(() {
+                      //       _isRememberMeChecked = value ?? false;
+                      //     });
+                      //   },
+                      // ),
+                      // Text("จดจำฉัน"),
                       Spacer(),
                       TextButton(
                         onPressed: () {

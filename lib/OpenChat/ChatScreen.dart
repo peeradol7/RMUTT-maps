@@ -1,16 +1,17 @@
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:maps/OpenChat/Login.dart';
 import 'package:maps/OpenChat/model/usermodel.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'PasswordResetDialog.dart';
+import 'sharepreferenceservice.dart';
 
 class ChatScreen extends StatefulWidget {
-  final UserModel user;
-
-  ChatScreen({required this.user});
+  ChatScreen({super.key});
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
@@ -20,128 +21,146 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ScrollController _scrollController = ScrollController();
+  late UserModel _user;
+  bool _isLoading = true;
 
-  Future<void> _sendMessage() async {
-    String message = _messageController.text.trim();
-    if (message.isNotEmpty) {
-      await _firestore.collection('chat').add({
-        'message': message,
-        'senderName': widget.user.name,
-        'senderUsername': widget.user.username,
-        'senderPhoneNumber': widget.user.phoneNumber,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
 
-      _messageController.clear();
+  String hashPassword(String password) {
+    final bytes = utf8.encode(password);
+    final hash = sha256.convert(bytes);
+    return hash.toString();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      SharedPreferencesService prefs =
+          await SharedPreferencesService.getInstance();
+      UserModel? user = await prefs.getStoredUserData();
+
+      if (user != null) {
+        setState(() {
+          _user = user;
+          _isLoading = false;
+        });
+      } else {
+        _logout();
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+      _logout();
     }
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-    });
-  }
+  Future<void> _sendMessage() async {
+    if (_user == null) return;
 
-  void _showEditDialog() {
-    TextEditingController nameController =
-        TextEditingController(text: widget.user.name);
-    TextEditingController passwordController = TextEditingController();
+    String message = _messageController.text.trim();
+    if (message.isNotEmpty) {
+      try {
+        await _firestore.collection('chat').add({
+          'message': message,
+          'senderName': _user!.name,
+          'senderUsername': _user!.username,
+          'senderPhoneNumber': _user!.phoneNumber,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("แก้ไขข้อมูล"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: "เปลี่ยนชื่อ",
-                ),
-              ),
-              SizedBox(height: 16),
-              TextField(
-                controller: passwordController,
-                decoration: InputDecoration(
-                  labelText: "เปลี่ยนรหัสผ่าน",
-                ),
-                obscureText: true,
-              ),
-            ],
-          ),
-          actions: [
-            // Cancel button
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context); // Close dialog without saving
-              },
-              child: Text("ยกเลิก"),
-            ),
-            // Save button
-            ElevatedButton(
-              onPressed: () async {
-                // Get the updated name and password
-                String updatedName = nameController.text.trim();
-                String updatedPassword = passwordController.text.trim();
+        _messageController.clear();
 
-                if (updatedName.isNotEmpty && updatedPassword.isNotEmpty) {
-                  // Update the user object with new values
-                  UserModel updatedUser = UserModel(
-                    userId: widget.user.userId, // Retain the user ID
-                    username: widget.user.username,
-                    name: updatedName, // New name
-                    password: updatedPassword, // New password
-                    phoneNumber: widget.user.phoneNumber,
-                  );
-
-                  // Save the updated data to Firestore
-                  await FirebaseFirestore.instance
-                      .collection('usersRMUTT')
-                      .doc(widget.user.userId)
-                      .update(updatedUser.toJson());
-
-                  // Optionally, save updated data to SharedPreferences as well
-                  SharedPreferences prefs =
-                      await SharedPreferences.getInstance();
-                  prefs.setString('user', jsonEncode(updatedUser.toJson()));
-
-                  // Close the dialog
-                  Navigator.pop(context);
-
-                  // Optionally, show a confirmation message
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('ข้อมูลถูกบันทึกเรียบร้อยแล้ว')),
-                  );
-                } else {
-                  // Show error if fields are empty
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')),
-                  );
-                }
-              },
-              child: Text("บันทึก"),
-            ),
-          ],
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeOut,
         );
-      },
-    );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('ไม่สามารถส่งข้อความได้ กรุณาลองใหม่อีกครั้ง')),
+        );
+      }
+    }
   }
 
   void _logout() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    SharedPreferencesService prefs =
+        await SharedPreferencesService.getInstance();
 
-    // นำทางไปยังหน้า Login
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => LoginScreen()),
-    );
+    print('Logging out... Clearing SharedPreferences');
+    await prefs.clearLoginData();
+    print('SharedPreferences cleared successfully.');
+
+    if (context.mounted) {
+      print('Navigating to LoginScreen...');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+      );
+    } else {
+      print('Context not mounted, cannot navigate.');
+    }
+  }
+
+  Future<void> _resetPassword(String hashedPassword) async {
+    try {
+      // ใช้ hashedPassword ที่ได้รับมาเลย ไม่ต้อง hash ใหม่
+
+      // Update password in Firestore
+      await _firestore
+          .collection('usersRMUTT')
+          .where('username', isEqualTo: _user?.username)
+          .get()
+          .then((querySnapshot) {
+        if (querySnapshot.docs.isNotEmpty) {
+          querySnapshot.docs.first.reference.update({
+            'password': hashedPassword,
+          });
+        }
+      });
+
+      // Update local user model
+      if (_user != null) {
+        UserModel updatedUser = UserModel(
+          userId: _user!.userId,
+          username: _user!.username,
+          name: _user!.name,
+          password: hashedPassword, // ใช้ค่าที่ได้รับมาเลย
+          phoneNumber: _user!.phoneNumber,
+        );
+
+        // Update SharedPreferences
+        SharedPreferencesService prefs =
+            await SharedPreferencesService.getInstance();
+        await prefs.saveLoginData(updatedUser);
+
+        setState(() {
+          _user = updatedUser;
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('รีเซ็ทรหัสผ่านสำเร็จ')),
+      );
+    } catch (e) {
+      print('Error resetting password: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Chat'),
@@ -165,29 +184,15 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             ListTile(
-              leading: Icon(Icons.edit),
-              title: Text('แก้ไขข้อมูล'),
-              onTap: _showEditDialog,
-            ),
-            ListTile(
-              leading: Icon(Icons.phone),
-              title: Text('เปลี่ยนเบอร์มือถือ'),
+              leading: Icon(Icons.password),
+              title: Text('รีเซ็ทรหัสผ่าน'),
               onTap: () {
-                // Show the dialog when the tile is tapped
+                Navigator.pop(context); // Close drawer
                 showDialog(
                   context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text('กรุณาติดต่อเจ้าหน้าที่'),
-                    content: Text(
-                        'หากคุณต้องการเปลี่ยนเบอร์มือถือ \nกรุณาติดต่อเจ้าหน้าที่'),
-                    actions: <Widget>[
-                      TextButton(
-                        child: Text('Okay'),
-                        onPressed: () {
-                          Navigator.of(ctx).pop();
-                        },
-                      ),
-                    ],
+                  builder: (context) => PasswordResetDialog(
+                    user: _user!,
+                    onPasswordReset: _resetPassword,
                   ),
                 );
               },
@@ -217,13 +222,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   return Center(child: Text('No messages yet'));
                 }
 
-                _scrollToBottom();
-
                 return ListView(
                   controller: _scrollController,
                   children: snapshot.data!.docs.map((doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    bool isMe = data['senderUsername'] == widget.user.username;
+                    bool isMe = data['senderUsername'] == _user.username;
 
                     var timestamp = data['timestamp'] != null
                         ? DateFormat('dd MMM yyyy HH:mm')

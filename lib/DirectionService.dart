@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -53,5 +55,72 @@ class DirectionService {
       print("Error fetching route: $e");
       return [];
     }
+  }
+}
+
+class RouteTrackingService {
+  Timer? _timer;
+  final Function(List<LatLng>) onRouteUpdate;
+  final Function() onDestinationReached;
+
+  RouteTrackingService({
+    required this.onRouteUpdate,
+    required this.onDestinationReached,
+  });
+
+  double _calculateDistance(LatLng point1, LatLng point2) {
+    var p = 0.017453292519943295; // Math.PI / 180
+    var c = cos;
+    var a = 0.5 -
+        c((point2.latitude - point1.latitude) * p) / 2 +
+        c(point1.latitude * p) *
+            c(point2.latitude * p) *
+            (1 - c((point2.longitude - point1.longitude) * p)) /
+            2;
+    return 12742 * asin(sqrt(a)) * 1000; // 2 * R; R = 6371 km
+  }
+
+  void startRouteTracking(
+    LatLng currentLocation,
+    LatLng destination,
+    String destinationName,
+  ) {
+    stopRouteTracking();
+
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      try {
+        // Get updated route
+        List<LatLng> route = await DirectionService.getRoute(
+          currentLocation,
+          destination,
+          destinationName,
+        );
+
+        // Calculate distance to destination
+        if (route.isNotEmpty) {
+          double distanceToDestination = _calculateDistance(
+            currentLocation,
+            destination,
+          );
+
+          // Update route
+          onRouteUpdate(route);
+
+          // Check if destination is reached (within 50 meters)
+          if (distanceToDestination <= 50) {
+            print('ถึงปลายทางแล้ว');
+            onDestinationReached();
+            stopRouteTracking();
+          }
+        }
+      } catch (e) {
+        print('Error updating route: $e');
+      }
+    });
+  }
+
+  void stopRouteTracking() {
+    _timer?.cancel();
+    _timer = null;
   }
 }

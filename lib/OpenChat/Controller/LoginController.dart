@@ -5,7 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:maps/OpenChat/model/usermodel.dart';
 
-import '../ChatScreen.dart';
+import '../sharepreferenceservice.dart';
 
 class LoginController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -13,18 +13,18 @@ class LoginController {
   String hashPassword(String password) {
     final bytes = utf8.encode(password);
     final hash = sha256.convert(bytes);
-    print('Input Password: $password');
-    print('Hashed Result: ${hash.toString()}');
     return hash.toString();
   }
 
-  Future<bool> login({
+  Future<UserModel?> login({
     required String username,
     required String password,
     required BuildContext context,
   }) async {
     try {
-      print('Input Password: $password');
+      // Hash the input password before comparison
+      String hashedPassword = hashPassword(password);
+      print('Input Password (hashed): $hashedPassword');
 
       QuerySnapshot querySnapshot = await _firestore
           .collection('usersRMUTT')
@@ -37,39 +37,36 @@ class LoginController {
         String storedPassword = userDoc['password'];
 
         print('Stored Password: $storedPassword');
-        print('Login Password: $password');
 
-        if (storedPassword == password) {
+        if (storedPassword == hashedPassword) {
           UserModel user = UserModel(
             userId: userDoc['userId'],
             username: userDoc['username'],
             name: userDoc['name'],
-            password: userDoc['password'],
-            phoneNumber: (userDoc.data() != null &&
-                    (userDoc.data() as Map<String, dynamic>)
-                        .containsKey('phoneNumber'))
+            password: storedPassword,
+            phoneNumber: (userDoc.data() as Map<String, dynamic>)
+                    .containsKey('phoneNumber')
                 ? userDoc['phoneNumber']
                 : '',
           );
 
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(user: user),
-            ),
-          );
-          return true;
+          SharedPreferencesService prefs =
+              await SharedPreferencesService.getInstance();
+          await prefs.saveLoginData(user);
+
+          return user;
         } else {
-          _showErrorDialog(context, 'Incorrect password. Please try again.');
-          return false;
+          _showErrorDialog(context, 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+          return null;
         }
       } else {
-        _showErrorDialog(context, 'Username not found. Please try again.');
-        return false;
+        _showErrorDialog(context, 'ไม่พบชื่อผู้ใช้ กรุณาลองใหม่อีกครั้ง');
+        return null;
       }
     } catch (e) {
       print('Error during login: $e');
-      _showErrorDialog(context, 'An error occurred. Please try again later.');
-      return false;
+      _showErrorDialog(context, 'เกิดข้อผิดพลาด กรุณาลองใหม่ภายหลัง');
+      return null;
     }
   }
 }

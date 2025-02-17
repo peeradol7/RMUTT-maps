@@ -11,10 +11,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:maps/DirectionController.dart';
 import 'package:maps/DirectionService.dart';
 import 'package:maps/MarkerController.dart';
-import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
+
+import 'MapboxDirectionService.dart';
+import 'OpenChat/ChatScreen.dart';
+import 'OpenChat/Login.dart';
+import 'OpenChat/sharepreferenceservice.dart';
 
 void main() async {
   runApp(const MyApp());
@@ -62,6 +66,7 @@ class MapSampleState extends State<MapSample> {
   bool _isNavigating = false;
   List<LatLng> _polylineCoordinates = [];
   bool _hasShownArrivalDialog = false;
+  Timer? _timer;
   Stream<Position>? _locationStream;
   late PanelController _panelController;
   bool _showPanel = false;
@@ -71,6 +76,8 @@ class MapSampleState extends State<MapSample> {
   LatLng? _destinationLatLng;
   Set<Polyline> _polylines = {};
   bool _isLoadingRoute = false;
+  RouteTrackingService? _routeTrackingService;
+  List<LatLng> _currentRoute = [];
   List<LatLng> _routeCoordinates = [];
   bool _cameraMoved = false;
 
@@ -87,8 +94,8 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor _atmIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _canteenIcon = BitmapDescriptor.defaultMarker;
   Timer? _routeUpdateTimer;
-  StreamSubscription<Position>? _navigationLocationSubscription;
   bool _isRouteActive = false;
+  bool _hasRequestedRoute = false;
   Timer? _locationUpdateTimer;
   LatLng? _savedDestination;
   String? _routeDistance;
@@ -101,6 +108,7 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor _sportIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _seven = BitmapDescriptor.defaultMarker;
   late GoogleMapController mapController;
+  MapboxDirectionService _service = MapboxDirectionService();
   final MarkerController _markerController = MarkerController();
   String _destination = '';
   List<Marker> _markers = [];
@@ -109,21 +117,26 @@ class MapSampleState extends State<MapSample> {
   double _travelDuration = 0.0;
   StreamSubscription<Position>? _locationSubscription;
   List<LatLng> _currentPolylinePoints = [];
+  late SharedPreferencesService _pref;
   @override
   void initState() {
     super.initState();
     _panelController = PanelController();
     _setMarkerIcon();
     _initializeIcons();
+    _initPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestLocationPermission(context);
     });
   }
 
+  Future<void> _initPreferences() async {
+    _pref = await SharedPreferencesService.getInstance();
+  }
+
   Future<void> _initializeIcons() async {
     _seven = await getResizedMarker('assets/iconCategory/seven.png', 125, 125);
     _atmIcon = await getResizedMarker('assets/iconCategory/atm.png', 125, 125);
-    // _libraryIcon = await getResizedMarker('assets/iconCategory/Libra.png', width, height)
     _faculty =
         await getResizedMarker('assets/iconCategory/faculty.png', 125, 125);
   }
@@ -149,7 +162,7 @@ class MapSampleState extends State<MapSample> {
       return;
     }
     mapController.animateCamera(
-      CameraUpdate.newLatLngZoom(destinationLatLng, 17.0),
+      CameraUpdate.newLatLngZoom(destinationLatLng, 18.0),
     );
   }
 
@@ -249,7 +262,7 @@ class MapSampleState extends State<MapSample> {
   Future<Uint8List> getBytesFromAsset(String path, int width) async {
     try {
       ByteData? data = await rootBundle.load(path);
-      print('Successfully loaded asset: $path');
+
       ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(),
           targetWidth: width);
       ui.FrameInfo fi = await codec.getNextFrame();
@@ -329,6 +342,58 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
+  Future<void> handlePlayButton(BuildContext context) async {
+    try {
+      print('Starting login process');
+
+      final storedUid = await _pref.getStoredUid();
+      print('Stored UID: $storedUid');
+
+      if (storedUid != null && storedUid.isNotEmpty) {
+        print('Valid UID found');
+
+        final userData = await _pref.getStoredUserData();
+        print('Stored User Data: $userData');
+
+        if (!context.mounted) {
+          print('Context not mounted');
+          return;
+        }
+
+        if (userData != null && userData.isNotEmpty) {
+          print('User data is not empty, navigating to ChatScreen');
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(),
+            ),
+          );
+          return;
+        } else {
+          print('User data is empty');
+        }
+      } else {
+        print('No valid UID found');
+      }
+
+      if (!context.mounted) {
+        print('Context not mounted');
+        return;
+      }
+
+      print('Navigating to LoginScreen');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LoginScreen(),
+        ),
+      );
+    } catch (e) {
+      print('Error in login process: $e');
+      print('Stack trace: ${StackTrace.current}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -369,9 +434,8 @@ class MapSampleState extends State<MapSample> {
           IconButton(
             icon: Icon(Icons.gps_fixed),
             onPressed: () {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _requestLocationPermission(context);
-              });
+              zoom(_currentPosition!);
+              _requestLocationPermission(context);
             },
           ),
         ],
@@ -387,10 +451,7 @@ class MapSampleState extends State<MapSample> {
             IconButton(
               icon: Icon(Icons.comment),
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => WelcomeScreen()),
-                );
+                handlePlayButton(context);
               },
             ),
             IconButton(
@@ -455,10 +516,9 @@ class MapSampleState extends State<MapSample> {
                       _markers.clear();
                       _showPanel = false;
                       _cancelRoute();
-                      // Cancel periodic route updates
                       _routeUpdateTimer?.cancel();
                       _routeUpdateTimer = null;
-                      // Reset other route-related states
+                      _timer?.cancel();
                       _isLoadingRoute = false;
                       _steps.clear();
                     });
@@ -578,7 +638,6 @@ class MapSampleState extends State<MapSample> {
                               LatLng destinationLatLng =
                                   LatLng(latitude, longitude);
                               zoom(destinationLatLng);
-                              // อัปเดตตำแหน่งปลายทางและเพิ่ม Marker
                               setState(() {
                                 _destinationLatLng = destinationLatLng;
                                 _destination = selectedLocation;
@@ -589,13 +648,13 @@ class MapSampleState extends State<MapSample> {
                                   title: selectedLocation,
                                   icon: BitmapDescriptor.defaultMarker,
                                   onTap: (LatLng tappedPosition) {
+                                    _markers.clear();
                                     _onMarkerTap(
                                         tappedPosition, selectedLocation);
                                   },
                                 );
                               });
 
-                              // ล้างค่าช่องค้นหา
                               textFieldOnTap(_searchController,
                                   selectedLocation, setState, _searchText);
                               _searchController.clear();
@@ -644,45 +703,31 @@ class MapSampleState extends State<MapSample> {
   }
 
   Future<void> _requestLocationPermission(BuildContext context) async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text('กรุณาเปิด GPS'),
-            content: Text('กรุณาเปิด GPS บนอุปกรณ์ของคุณ'),
-            actions: <Widget>[
-              TextButton(
-                child: Text('ตกลง'),
-                onPressed: () {
-                  Navigator.of(context).pop(); // ปิด Dialog
-                },
-              ),
-            ],
-          );
-        },
-      );
-      return Future.error('Location services are disabled.');
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return Future.error('Location permissions are denied');
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        // แจ้งให้ผู้ใช้เปิด GPS
+        _showGPSDialog(context);
+        throw Exception('Location services are disabled.');
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
-      return Future.error(
-          'Location permissions are permanently denied, we cannot request permissions.');
-    }
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception('Location permissions are denied');
+        }
+      }
 
-    startTrackingLocation();
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception('Location permissions are permanently denied.');
+      }
+
+      // เริ่มติดตามตำแหน่ง
+      startTrackingLocation();
+    } catch (e) {
+      print("เกิดข้อผิดพลาด: $e");
+    }
   }
 
   void resetRouteRequest() {
@@ -698,11 +743,55 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
-  bool _hasRequestedRoute = false;
+  void _showGPSDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('กรุณาเปิด GPS'),
+          content: Text('กรุณาเปิด GPS บนอุปกรณ์ของคุณ'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('ตกลง'),
+              onPressed: () {
+                Navigator.of(context).pop(); // ปิด Dialog
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void showErrorWalkError() {
+    if (!mounted) return; // ตรวจสอบว่าหน้ายังอยู่
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text('ไม่สามารถแสดงเส้นทางได้'),
+          content: Text('ต้องอยู่ในบริเวณมหาวิทยาลัยเท่านั้น'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _cancelRoute();
+                });
+              },
+              child: Text('ตกลง'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
       String destination) async {
     if (_isLoadingRoute || !_isRouteActive) return;
+    print('_isRouteActive: $_isRouteActive');
 
     setState(() {
       _isLoadingRoute = true;
@@ -719,7 +808,6 @@ class MapSampleState extends State<MapSample> {
       onRouteFetched: (polylineCoordinates, steps) {
         if (_shouldUpdatePolyline(polylineCoordinates) && _isRouteActive) {
           setState(() {
-            // Cast the steps to the correct type
             _steps =
                 steps.map((step) => Map<String, dynamic>.from(step)).toList();
             _updatePolylineSmoothly(polylineCoordinates);
@@ -744,6 +832,7 @@ class MapSampleState extends State<MapSample> {
           destinationLatLng,
         );
       }
+      showErrorWalkError();
     } catch (e) {
       setState(() {
         _isLoadingRoute = false;
@@ -755,7 +844,6 @@ class MapSampleState extends State<MapSample> {
   bool _shouldUpdatePolyline(List<LatLng> newPolylinePoints) {
     if (_currentPolylinePoints.isEmpty) return true;
 
-    // เปรียบเทียบจุดเริ่มต้นและจุดสิ้นสุดของเส้นทาง
     double startPointDiff = Geolocator.distanceBetween(
       _currentPolylinePoints.first.latitude,
       _currentPolylinePoints.first.longitude,
@@ -770,14 +858,12 @@ class MapSampleState extends State<MapSample> {
       newPolylinePoints.last.longitude,
     );
 
-    // อัปเดตเฉพาะเมื่อมีความแตกต่างที่มากพอ
     return startPointDiff > 5 || endPointDiff > 5;
   }
 
   void startRouteTracking(LatLng currentPosition, LatLng destinationLatLng) {
-    startTrackingLocation(); // เริ่มติดตามตำแหน่งปัจจุบัน
-    startPeriodicRouteUpdates(
-        currentPosition, destinationLatLng); // เริ่มอัปเดตเส้นทาง
+    startTrackingLocation();
+    startPeriodicRouteUpdates(currentPosition, destinationLatLng);
   }
 
   void startPeriodicRouteUpdates(
@@ -797,7 +883,7 @@ class MapSampleState extends State<MapSample> {
     _locationSubscription = Geolocator.getPositionStream(
       locationSettings: LocationSettings(
         accuracy: LocationAccuracy.best,
-        distanceFilter: 0,
+        distanceFilter: 2,
       ),
     ).listen((Position position) async {
       setState(() {
@@ -808,30 +894,8 @@ class MapSampleState extends State<MapSample> {
         _moveCameraToPosition(_currentPosition!);
         _cameraMoved = true;
       }
-      if (_isRouteActive && _savedDestination != null) {
-        try {
-          List<LatLng> updatedRoute = await DirectionService.getRoute(
-              _currentPosition!,
-              _savedDestination!,
-              _savedDestinationName ?? 'Destination');
-
-          if (updatedRoute.isNotEmpty) {
-            setState(() {
-              _polylines = {
-                Polyline(
-                  polylineId: PolylineId('route'),
-                  points: updatedRoute,
-                  color: Colors.blue,
-                  width: 5,
-                  geodesic: true,
-                )
-              };
-            });
-          }
-        } catch (e) {
-          print("Error updating route: $e");
-        }
-      }
+    }, onError: (error) {
+      print("เกิดข้อผิดพลาดใน Position Stream: $error");
     });
   }
 
@@ -922,6 +986,29 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
+  void _drawRoutePolyline(List<List<double>> coordinates) {
+    if (coordinates.isEmpty) {
+      print('No coordinates to draw.');
+      return;
+    }
+
+    final List<LatLng> points =
+        coordinates.map((coord) => LatLng(coord[0], coord[1])).toList();
+
+    setState(() {
+      _polylines.add(
+        Polyline(
+          polylineId: PolylineId('route'),
+          points: points,
+          color: Colors.blue,
+          width: 5,
+        ),
+      );
+    });
+
+    print('Polyline added: ${_polylines.length}');
+  }
+
   void _onMarkerTap(LatLng endLocation, String destination) {
     if (_isLoadingRoute) return;
 
@@ -939,33 +1026,29 @@ class MapSampleState extends State<MapSample> {
                   _savedDestination = endLocation;
                   _savedDestinationName = destination;
                   _isRouteActive = true;
+
                   final GoogleMapController controller =
                       await _controller.future;
                   controller.animateCamera(
                     CameraUpdate.newLatLngZoom(_currentPosition!, 20),
                   );
 
-                  List<LatLng> route = await DirectionService.getRoute(
-                      _currentPosition!, endLocation, destination);
-
-                  if (route.isNotEmpty) {
-                    if (_polylines.isEmpty ||
-                        _polylines.first.points != route) {
-                      setState(() {
-                        _polylines = {
-                          Polyline(
-                            polylineId: PolylineId('route'),
-                            points: route,
-                            color: Colors.blue,
-                            width: 5,
-                            geodesic: true,
-                          )
-                        };
-                      });
-                    }
-                  } else {
-                    // สามารถเพิ่มการจัดการกรณีเส้นทางว่างได้ที่นี่
-                  }
+                  startUpdatingRoute(
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude,
+                    endLocation.latitude,
+                    endLocation.longitude,
+                    (routeCoordinates) {
+                      if (routeCoordinates.isEmpty) {
+                        _showArrivalDialog();
+                        stopUpdatingRoute();
+                      } else {
+                        setState(() {
+                          _drawRoutePolyline(routeCoordinates);
+                        });
+                      }
+                    },
+                  );
                 }
               },
               child: Text('เดินทางด้วยรถ'),
@@ -982,7 +1065,6 @@ class MapSampleState extends State<MapSample> {
                   controller.animateCamera(
                     CameraUpdate.newLatLngZoom(_currentPosition!, 20),
                   );
-
                   _fetchRouteFromApiOnce(
                       _currentPosition!, endLocation, destination);
                   _startPeriodicRouteUpdates();
@@ -1000,6 +1082,54 @@ class MapSampleState extends State<MapSample> {
         );
       },
     );
+  }
+
+  Future<void> startUpdatingRoute(
+      double startLat,
+      double startLng,
+      double endLat,
+      double endLng,
+      Function(List<List<double>>) onUpdate) async {
+    LatLng? _lastPosition;
+    _isRouteActive = true;
+
+    _timer?.cancel();
+    _timer = Timer.periodic(Duration(seconds: 2), (timer) async {
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(
+        CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+      );
+      try {
+        if (_currentPosition == null) return;
+
+        bool hasLocationChanged = _lastPosition == null ||
+            (calculateDistance(
+                    _lastPosition!.latitude,
+                    _lastPosition!.longitude,
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude) >
+                5);
+
+        if (hasLocationChanged) {
+          final routeCoordinates = await _service.getDirections(
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+            endLat,
+            endLng,
+          );
+
+          _lastPosition = _currentPosition;
+
+          onUpdate(routeCoordinates);
+        }
+      } catch (e) {
+        print('Error updating route: $e');
+      }
+    });
+  }
+
+  void stopUpdatingRoute() {
+    _timer?.cancel();
   }
 
   List<List<double>> decodePolyline(String encoded) {
@@ -1176,86 +1306,6 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  void _updatePolyline() {
-    if (_currentPosition == null || _fullRoutePoints.isEmpty) return;
-
-    double calculateDistance(LatLng point1, LatLng point2) {
-      const double earthRadius = 6371000;
-      double dLat = (point2.latitude - point1.latitude) * pi / 180;
-      double dLng = (point2.longitude - point1.longitude) * pi / 180;
-      double a = sin(dLat / 2) * sin(dLat / 2) +
-          cos(point1.latitude * pi / 180) *
-              cos(point2.latitude * pi / 180) *
-              sin(dLng / 2) *
-              sin(dLng / 2);
-      double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-      return earthRadius * c;
-    }
-
-    LatLng interpolatePoint(LatLng start, LatLng end, double fraction) {
-      double lat = start.latitude + (end.latitude - start.latitude) * fraction;
-      double lng =
-          start.longitude + (end.longitude - start.longitude) * fraction;
-      return LatLng(lat, lng);
-    }
-
-    setState(() {
-      List<LatLng> newPoints = [];
-      const double minDistance = 10.0; // ปรับเป็น 10 เมตร
-      const double maxDistance = 500.0;
-      const double segmentLength =
-          10.0; // ปรับระยะห่างระหว่างจุดเป็น 10 เมตรด้วย
-
-      for (int i = 0; i < _fullRoutePoints.length - 1; i++) {
-        LatLng start = _fullRoutePoints[i];
-        LatLng end = _fullRoutePoints[i + 1];
-        double segmentDistance = calculateDistance(start, end);
-
-        if (segmentDistance > 0) {
-          int numPoints = (segmentDistance / segmentLength).ceil();
-          for (int j = 0; j < numPoints; j++) {
-            double fraction = j / numPoints;
-            LatLng point = interpolatePoint(start, end, fraction);
-            double distanceFromCurrent =
-                calculateDistance(point, _currentPosition!);
-
-            if (distanceFromCurrent >= minDistance &&
-                distanceFromCurrent <= maxDistance) {
-              newPoints.add(point);
-            }
-          }
-        }
-      }
-
-      // จัดการจุดสุดท้าย
-      if (_fullRoutePoints.isNotEmpty) {
-        LatLng lastPoint = _fullRoutePoints.last;
-        double distanceToLast = calculateDistance(lastPoint, _currentPosition!);
-        if (distanceToLast >= minDistance && distanceToLast <= maxDistance) {
-          newPoints.add(lastPoint);
-        }
-      }
-
-      _polylineCoordinates = newPoints;
-
-      if (_polylineCoordinates.isEmpty && !_hasArrived) {
-        _polylines.clear();
-        _isRouteActive = false;
-        _hasArrived = true;
-        _showArrivalDialog();
-      } else if (_polylineCoordinates.isNotEmpty) {
-        _polylines = {
-          Polyline(
-            polylineId: PolylineId('route'),
-            points: _polylineCoordinates,
-            color: Colors.blue,
-            width: 5,
-          ),
-        };
-      }
-    });
-  }
-
   int findClosestPointOnRoute(LatLng currentPosition) {
     int closestIndex = 0;
     double closestDistance = double.infinity;
@@ -1381,7 +1431,17 @@ class MapSampleState extends State<MapSample> {
   }
 
   double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2);
+    const R = 6371e3;
+    final phi1 = lat1 * pi / 180;
+    final phi2 = lat2 * pi / 180;
+    final deltaPhi = (lat2 - lat1) * pi / 180;
+    final deltaLambda = (lon2 - lon1) * pi / 180;
+
+    final a = sin(deltaPhi / 2) * sin(deltaPhi / 2) +
+        cos(phi1) * cos(phi2) * sin(deltaLambda / 2) * sin(deltaLambda / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return R * c;
   }
 
   double _calculateDistance(
