@@ -11,14 +11,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:maps/DirectionController.dart';
 import 'package:maps/DirectionService.dart';
 import 'package:maps/MarkerController.dart';
+import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
-import 'MapboxDirectionService.dart';
-import 'OpenChat/ChatScreen.dart';
-import 'OpenChat/Login.dart';
-import 'OpenChat/sharepreferenceservice.dart';
+import '../MapboxDirectionService.dart';
+import '../OpenChat/ChatScreen.dart';
+import '../OpenChat/sharepreferenceservice.dart';
 
 void main() async {
   runApp(const MyApp());
@@ -98,10 +98,7 @@ class MapSampleState extends State<MapSample> {
   bool _hasRequestedRoute = false;
   Timer? _locationUpdateTimer;
   LatLng? _savedDestination;
-  String? _routeDistance;
-  String? _routeDuration;
   String? _savedDestinationName;
-  LatLng? _lastUpdatedPosition;
 
   LatLng? _endLocation;
   final QuestionnaireDialogHelper questionnaire = QuestionnaireDialogHelper();
@@ -114,7 +111,6 @@ class MapSampleState extends State<MapSample> {
   List<Marker> _markers = [];
   List<Map<String, dynamic>> _steps = [];
   late LatLng newPosition;
-  double _travelDuration = 0.0;
   StreamSubscription<Position>? _locationSubscription;
   List<LatLng> _currentPolylinePoints = [];
   late SharedPreferencesService _pref;
@@ -130,10 +126,12 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
+// เรียก Instance ของ  SharedPreferences
   Future<void> _initPreferences() async {
     _pref = await SharedPreferencesService.getInstance();
   }
 
+//โหลดไอคอนของหมวดหมู่ บางตัวที่ฟังชัน _showCategoryLocations ไม่สามารถแสดงออกมาได้
   Future<void> _initializeIcons() async {
     _seven = await getResizedMarker('assets/iconCategory/seven.png', 125, 125);
     _atmIcon = await getResizedMarker('assets/iconCategory/atm.png', 125, 125);
@@ -141,6 +139,7 @@ class MapSampleState extends State<MapSample> {
         await getResizedMarker('assets/iconCategory/faculty.png', 125, 125);
   }
 
+  //โหลดข้อมูลรูป
   Future<BitmapDescriptor> getResizedMarker(
       String assetPath, int width, int height) async {
     ByteData data = await rootBundle.load(assetPath);
@@ -155,6 +154,7 @@ class MapSampleState extends State<MapSample> {
     return BitmapDescriptor.fromBytes(resizedImage!.buffer.asUint8List());
   }
 
+  //ฟังชันสำหรับ ZOOM เข้า
   Future<void> zoom(LatLng destinationLatLng) async {
     final GoogleMapController? mapController = await _controller.future;
     if (mapController == null) {
@@ -166,6 +166,7 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+//ฟังชันสำหรับแสดงหมวดหมู่สถานที่
   void _showCategoryLocations(String locationType) async {
     setState(() {
       _markerController.clearMarkers(exceptId: 'currentLocation');
@@ -243,8 +244,6 @@ class MapSampleState extends State<MapSample> {
             );
           });
         }
-        print('Seven Icon initialized: ${_seven != null}');
-        print('ATM Icon initialized: ${_atmIcon != null}');
       }
 
       var firstDoc = snapshot.docs.first.data();
@@ -259,6 +258,7 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
+  // โหลดรูปภาพ (เวอร์ชันเก่า)
   Future<Uint8List> getBytesFromAsset(String path, int width) async {
     try {
       ByteData? data = await rootBundle.load(path);
@@ -275,6 +275,7 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
+//เซ็ท Icon ของ Marker id ต่า่งๆ
   Future<void> _setMarkerIcon() async {
     final Uint8List markerIcon =
         await getBytesFromAsset('assets/Userlocation.png', 125);
@@ -324,7 +325,7 @@ class MapSampleState extends State<MapSample> {
     target: LatLng(14.03658958923885, 100.72790357867967),
     zoom: 16,
   );
-
+  //ฟังชันสำหรับแสดง type Location ทั้งหมด เมื่อค้นหาบน TextField
   void searchTypeLocation(String query) {
     switch (query.toLowerCase()) {
       case 'ห้องเรียน':
@@ -342,18 +343,13 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-  Future<void> handlePlayButton(BuildContext context) async {
+//ฟังชันสำหรับ เข้าระบบ Community ถ้าข้อมูลไม่อยู่ใน Key ของ getStoredUserData ก็จะไปหน้าของ WelcomeScreen
+  Future<void> handleChat(BuildContext context) async {
     try {
-      print('Starting login process');
-
       final storedUid = await _pref.getStoredUid();
-      print('Stored UID: $storedUid');
 
       if (storedUid != null && storedUid.isNotEmpty) {
-        print('Valid UID found');
-
         final userData = await _pref.getStoredUserData();
-        print('Stored User Data: $userData');
 
         if (!context.mounted) {
           print('Context not mounted');
@@ -361,7 +357,6 @@ class MapSampleState extends State<MapSample> {
         }
 
         if (userData != null && userData.isNotEmpty) {
-          print('User data is not empty, navigating to ChatScreen');
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -385,7 +380,7 @@ class MapSampleState extends State<MapSample> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => LoginScreen(),
+          builder: (context) => WelcomeScreen(),
         ),
       );
     } catch (e) {
@@ -451,7 +446,7 @@ class MapSampleState extends State<MapSample> {
             IconButton(
               icon: Icon(Icons.comment),
               onPressed: () {
-                handlePlayButton(context);
+                handleChat(context);
               },
             ),
             IconButton(
@@ -555,6 +550,7 @@ class MapSampleState extends State<MapSample> {
                 ),
               ),
             ),
+          //ค้นหาชื่อสถานที่โดยเอา Container มาวางในจุด ของ Positioned
           if (_searchText.isEmpty)
             Container()
           else
@@ -702,6 +698,7 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+//ขอสิทธิ์เข้าถึง GPS
   Future<void> _requestLocationPermission(BuildContext context) async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -763,6 +760,7 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+//แสดง Error ของโหมดเดินว่า ไม่ได้อยู่ในมหาลัย
   void showErrorWalkError() {
     if (!mounted) return; // ตรวจสอบว่าหน้ายังอยู่
     showDialog(
@@ -788,6 +786,7 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+  // Fetch เส้นทางจาก API โหมดเดิน
   void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
       String destination) async {
     if (_isLoadingRoute || !_isRouteActive) return;
@@ -824,7 +823,7 @@ class MapSampleState extends State<MapSample> {
         _handleArrival();
       },
     );
-
+    // ถ้า อยู่นอกมหาลัยจะแสดง Error Dialog
     try {
       if (_isRouteActive) {
         await directionController.fetchAndCalculateRoutes(
@@ -841,6 +840,7 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
+//อัพเดท Polyline
   bool _shouldUpdatePolyline(List<LatLng> newPolylinePoints) {
     if (_currentPolylinePoints.isEmpty) return true;
 
@@ -861,27 +861,11 @@ class MapSampleState extends State<MapSample> {
     return startPointDiff > 5 || endPointDiff > 5;
   }
 
-  void startRouteTracking(LatLng currentPosition, LatLng destinationLatLng) {
-    startTrackingLocation();
-    startPeriodicRouteUpdates(currentPosition, destinationLatLng);
-  }
-
-  void startPeriodicRouteUpdates(
-      LatLng currentPosition, LatLng destinationLatLng) {
-    _routeUpdateTimer?.cancel(); // ยกเลิก Timer เดิมถ้ามี
-    _routeUpdateTimer = Timer.periodic(Duration(seconds: 2), (_) {
-      _fetchRouteFromApiOnce(currentPosition, destinationLatLng, 'Destination');
-    });
-  }
-
-  void stopRouteTracking() {
-    stopTrackingLocation(); // หยุดติดตามตำแหน่งปัจจุบัน
-    _routeUpdateTimer?.cancel(); // หยุดการอัปเดตเส้นทาง
-  }
-
+// Tracking จุด _currentPosition
   void startTrackingLocation() {
     _locationSubscription = Geolocator.getPositionStream(
       locationSettings: LocationSettings(
+        //ความแม่นยำ = best distanceFilter คือ การอัพเดทจุด GPS ทุกๆ2เมตร
         accuracy: LocationAccuracy.best,
         distanceFilter: 2,
       ),
@@ -891,7 +875,7 @@ class MapSampleState extends State<MapSample> {
       });
 
       if (!_cameraMoved) {
-        _moveCameraToPosition(_currentPosition!);
+        zoom(_currentPosition!);
         _cameraMoved = true;
       }
     }, onError: (error) {
@@ -928,10 +912,7 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-  void stopTrackingLocation() {
-    _locationSubscription?.cancel();
-  }
-
+// อัพเดท Polyline แต่ไม่มั่นใจว่าฟังชันนี้ต้องใช้มั้ย (ยังไม่ลบออกและเทส)
   void _updatePolylineSmoothly(List<LatLng> newPolylinePoints) {
     final Polyline newPolyline = Polyline(
       polylineId: PolylineId('route'),
@@ -946,11 +927,7 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
-  void _moveCameraToPosition(LatLng position) async {
-    final controller = await _controller.future;
-    controller.animateCamera(CameraUpdate.newLatLngZoom(position, 18));
-  }
-
+//ฟังชันสำหรับ Call API ทุกๆ 2 วินาที
   void _startPeriodicRouteUpdates() {
     _routeUpdateTimer?.cancel();
     _routeUpdateTimer = Timer.periodic(Duration(seconds: 2), (timer) {
@@ -961,6 +938,7 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
+//ฟังชันบสำหรับเคลียร์ทุกอย่างที่เกี่ยวกับแผนที่
   void _cancelRoute() {
     setState(() {
       _polylines.clear();
@@ -986,6 +964,7 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
+//วาดเส้น polyline
   void _drawRoutePolyline(List<List<double>> coordinates) {
     if (coordinates.isEmpty) {
       print('No coordinates to draw.');
@@ -1009,9 +988,9 @@ class MapSampleState extends State<MapSample> {
     print('Polyline added: ${_polylines.length}');
   }
 
+  //ฟังชันสำหรับแสดง Dialog เมื่อกดจุดมาร์ค
   void _onMarkerTap(LatLng endLocation, String destination) {
     if (_isLoadingRoute) return;
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -1084,6 +1063,7 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+  // Update เส้นทางหมวดรถที่Call Api มาจาก MapBox Direction Api เรียกทุกๆ2วินาทีและอัพเดทเมื่อ currentPosition เปลี่ยนพิกัด
   Future<void> startUpdatingRoute(
       double startLat,
       double startLng,
@@ -1132,37 +1112,6 @@ class MapSampleState extends State<MapSample> {
     _timer?.cancel();
   }
 
-  List<List<double>> decodePolyline(String encoded) {
-    List<List<double>> poly = [];
-    int index = 0, len = encoded.length;
-    int lat = 0, lng = 0;
-
-    while (index < len) {
-      int b, shift = 0, result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lat += dlat;
-
-      shift = 0;
-      result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lng += dlng;
-
-      poly.add([lat / 1E5, lng / 1E5]);
-    }
-
-    return poly;
-  }
-
   void _showArrivalDialog() {
     showDialog(
       context: context,
@@ -1190,6 +1139,7 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+// Widget สำหรับแสดง หมวดหมู่สถานที่
   void _showMenu() {
     showModalBottomSheet(
       context: context,
@@ -1306,87 +1256,6 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-  int findClosestPointOnRoute(LatLng currentPosition) {
-    int closestIndex = 0;
-    double closestDistance = double.infinity;
-
-    for (int i = 0; i < _fullRoutePoints.length; i++) {
-      double distance = calculateDistance(
-        currentPosition.latitude,
-        currentPosition.longitude,
-        _fullRoutePoints[i].latitude,
-        _fullRoutePoints[i].longitude,
-      );
-
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = i;
-      }
-    }
-
-    return closestIndex;
-  }
-
-  double calculateRemainingDistance(List<LatLng> points) {
-    double distance = 0;
-    for (int i = 0; i < points.length - 1; i++) {
-      distance += calculateDistance(
-        points[i].latitude,
-        points[i].longitude,
-        points[i + 1].latitude,
-        points[i + 1].longitude,
-      );
-    }
-    return distance;
-  }
-
-  void updateRoutePolyline(List<LatLng> points) {
-    if (!mounted) return;
-
-    setState(() {
-      _polylines.clear();
-      // สร้าง polyline ใหม่จากจุดปัจจุบันไปยังจุดหมาย
-      List<LatLng> remainingPoints = _getRemainingRoutePoints();
-      if (remainingPoints.isNotEmpty) {
-        _polylines.add(
-          Polyline(
-            polylineId: const PolylineId('route'),
-            points: remainingPoints,
-            color: Colors.blue,
-            width: 5,
-          ),
-        );
-      }
-    });
-  }
-
-  List<LatLng> _getRemainingRoutePoints() {
-    if (_currentPosition == null || _fullRoutePoints.isEmpty) {
-      return _fullRoutePoints;
-    }
-
-    // หาจุดที่ใกล้ที่สุดบน route
-    int closestPointIndex = 0;
-    double minDistance = double.infinity;
-
-    for (int i = 0; i < _fullRoutePoints.length; i++) {
-      double distance = _calculateDistance(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-        _fullRoutePoints[i].latitude,
-        _fullRoutePoints[i].longitude,
-      );
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestPointIndex = i;
-      }
-    }
-
-    // ตัดเอาเฉพาะเส้นทางที่เหลือ
-    return _fullRoutePoints.sublist(closestPointIndex);
-  }
-
   void handleDirectionError(dynamic error) {
     setState(() {
       _isLoadingRoute = false;
@@ -1442,46 +1311,5 @@ class MapSampleState extends State<MapSample> {
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
     return R * c;
-  }
-
-  double _calculateDistance(
-      double lat1, double lon1, double lat2, double lon2) {
-    const double earthRadius = 6371000; // รัศมีโลกในเมตร
-
-    double dLat = _toRadians(lat2 - lat1);
-    double dLon = _toRadians(lon2 - lon1);
-
-    double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_toRadians(lat1)) *
-            cos(_toRadians(lat2)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
-
-    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadius * c;
-  }
-
-  double _toRadians(double degree) {
-    return degree * pi / 180;
-  }
-
-  void updateNavigationProgress2() async {
-    if (_currentPosition == null || _fullRoutePoints.isEmpty) return;
-
-    int closestPointIndex = findClosestPointOnRoute(_currentPosition!);
-
-    List<LatLng> remainingPoints = _fullRoutePoints.sublist(closestPointIndex);
-
-    updateRoutePolyline(remainingPoints);
-
-    _remainingDistance = calculateRemainingDistance(remainingPoints);
-
-    if (_remainingDistance < 20) {
-      _handleArrival();
-    }
-    if (!_cameraMoved) {
-      final GoogleMapController controller = await _controller.future;
-      controller.animateCamera(CameraUpdate.newLatLng(_currentPosition!));
-    }
   }
 }
