@@ -16,33 +16,7 @@ import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
-import '../MapboxDirectionService.dart';
-import '../OpenChat/ChatScreen.dart';
-import '../OpenChat/sharepreferenceservice.dart';
 
-void main() async {
-  runApp(const MyApp());
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: MapSample(),
-        title: 'RMUTT Nav',
-        theme: ThemeData(
-          primarySwatch: Colors.lightBlue,
-        ),
-      ),
-    );
-  }
-}
 
 class MapSample extends StatefulWidget {
   const MapSample({Key? key}) : super(key: key);
@@ -787,59 +761,67 @@ class MapSampleState extends State<MapSample> {
   }
 
   // Fetch เส้นทางจาก API โหมดเดิน
-  void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
-      String destination) async {
-    if (_isLoadingRoute || !_isRouteActive) return;
-    print('_isRouteActive: $_isRouteActive');
+void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
+    String destination) async {
+  if (_isLoadingRoute || !_isRouteActive) return;
+  print('_isRouteActive: $_isRouteActive');
 
-    setState(() {
-      _isLoadingRoute = true;
-    });
+  setState(() {
+    _isLoadingRoute = true;
+  });
 
-    if (_isRouteActive) {
-      final GoogleMapController controller = await _controller.future;
-      controller.animateCamera(
-        CameraUpdate.newLatLngZoom(currentPosition, 20),
-      );
-    }
-
-    final directionController = DirectionController(
-      onRouteFetched: (polylineCoordinates, steps) {
-        if (_shouldUpdatePolyline(polylineCoordinates) && _isRouteActive) {
-          setState(() {
-            _steps =
-                steps.map((step) => Map<String, dynamic>.from(step)).toList();
-            _updatePolylineSmoothly(polylineCoordinates);
-            _currentPolylinePoints = polylineCoordinates;
-            _isLoadingRoute = false;
-          });
-        } else {
-          setState(() {
-            _isLoadingRoute = false;
-          });
-        }
-      },
-      onArrivalDetected: () {
-        _handleArrival();
-      },
+  if (_isRouteActive) {
+    final GoogleMapController controller = await _controller.future;
+    controller.animateCamera(
+      CameraUpdate.newLatLngZoom(currentPosition, 20),
     );
-    // ถ้า อยู่นอกมหาลัยจะแสดง Error Dialog
-    try {
-      if (_isRouteActive) {
-        await directionController.fetchAndCalculateRoutes(
-          currentPosition,
-          destinationLatLng,
-        );
-      }
-      showErrorWalkError();
-    } catch (e) {
-      setState(() {
-        _isLoadingRoute = false;
-      });
-      print('Error in _fetchRouteFromApiOnce: $e');
-    }
   }
 
+  final directionController = DirectionController(
+    onRouteFetched: (polylineCoordinates, steps) {
+      if (polylineCoordinates.isEmpty) {
+      showErrorWalkError();
+      
+        setState(() {
+          _isLoadingRoute = false;
+        });
+        return;
+      }
+
+      if (_shouldUpdatePolyline(polylineCoordinates) && _isRouteActive) {
+        setState(() {
+          _steps =
+              steps.map((step) => Map<String, dynamic>.from(step)).toList();
+          _updatePolylineSmoothly(polylineCoordinates);
+          _currentPolylinePoints = polylineCoordinates;
+          _isLoadingRoute = false;
+        });
+      } else {
+        setState(() {
+          _isLoadingRoute = false;
+        });
+      }
+    },
+    onArrivalDetected: () {
+      _handleArrival();
+    },
+  );
+
+  try {
+    if (_isRouteActive) {
+      await directionController.fetchAndCalculateRoutes(
+        currentPosition,
+        destinationLatLng,
+      );
+    }
+  } catch (e) {
+    setState(() {
+      _isLoadingRoute = false;
+    });
+    print('Error in _fetchRouteFromApiOnce: $e');
+
+  }
+}
 //อัพเดท Polyline
   bool _shouldUpdatePolyline(List<LatLng> newPolylinePoints) {
     if (_currentPolylinePoints.isEmpty) return true;
