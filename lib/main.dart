@@ -16,6 +16,7 @@ import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
+import 'Map_page/map.dart';
 import 'MapboxDirectionService.dart';
 import 'OpenChat/ChatScreen.dart';
 import 'OpenChat/sharepreferenceservice.dart';
@@ -43,4 +44,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
