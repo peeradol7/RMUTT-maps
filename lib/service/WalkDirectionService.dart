@@ -1,17 +1,16 @@
 import 'dart:async';
 import 'dart:convert'; // สำหรับแปลง JSON
 
+import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:flutter/material.dart';
-
-class DirectionController {
+class Walkdirectionservice {
   final Function(List<LatLng>, List<Map<String, dynamic>>) onRouteFetched;
   final Function() onArrivalDetected;
   final BuildContext context;
 
-  DirectionController({
+  Walkdirectionservice({
     required this.onRouteFetched,
     required this.onArrivalDetected,
     required this.context, // รับค่า context
@@ -73,7 +72,7 @@ class DirectionController {
         onRouteFetched(polylineCoordinates, steps);
       } else if (response.statusCode == 400) {
         _showErrorDialog(
-            "เกิดข้อผิดพลาด", "ไม่สามารถดึงเส้นทางได้ (Error 400)");
+            "ไม่สามารถแสดงเส้นทางได้", "ต้องใช้ภายในมหาวิทยาลัยเท่านั้น");
       } else {
         print('API Error: ${response.statusCode}');
         throw Exception('Failed to fetch route: ${response.statusCode}');
@@ -89,8 +88,8 @@ class DirectionController {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('ไม่สามารถแสดงเส้นทางได้'),
-          content: Text('ต้องใช้ภายในมหาวิทยาลัยเท่านั้น'),
+          title: Text('$title'),
+          content: Text('$message'),
           actions: [
             TextButton(
               onPressed: () {

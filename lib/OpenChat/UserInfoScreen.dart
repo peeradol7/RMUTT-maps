@@ -72,7 +72,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         'username': username,
         'phoneNumber': phoneNumber,
         'password': hashedPassword,
-        'createdAt': FieldValue.serverTimestamp(),
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -168,7 +167,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           _confirmPasswordController.text.trim();
 
                       if (!isValidName(name)) {
-                        _showErrorDialog(context, 'คุณยังไม่ได้กรอกชื่อ กรุณากรอกชื่อ');
+                        _showErrorDialog(
+                            context, 'คุณยังไม่ได้กรอกชื่อ กรุณากรอกชื่อ');
                         return;
                       }
 
@@ -185,7 +185,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       }
 
                       if (password != confirmPassword) {
-                        _showErrorDialog(context, 'การยืนยันรหัสผ่านไม่ถูกต้อง');
+                        _showErrorDialog(
+                            context, 'การยืนยันรหัสผ่านไม่ถูกต้อง');
                         return;
                       }
 

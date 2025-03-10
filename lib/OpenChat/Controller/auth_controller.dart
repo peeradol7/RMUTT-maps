@@ -14,7 +14,6 @@ class AuthController {
       'username': username,
       'phoneNumber': phoneNumber,
       'password': password,
-      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 }

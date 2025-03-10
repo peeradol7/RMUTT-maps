@@ -3,22 +3,21 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:maps/DirectionController.dart';
-import 'package:maps/DirectionService.dart';
 import 'package:maps/MarkerController.dart';
 import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
+import 'package:maps/service/WalkDirectionService.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
 import '../MapboxDirectionService.dart';
 import '../OpenChat/ChatScreen.dart';
 import '../OpenChat/sharepreferenceservice.dart';
+import '../service/CarDirectionService.dart';
 
 class MapSample extends StatefulWidget {
   const MapSample({Key? key}) : super(key: key);
@@ -56,19 +55,21 @@ class MapSampleState extends State<MapSample> {
   List<LatLng> _currentRoute = [];
   List<LatLng> _routeCoordinates = [];
   bool _cameraMoved = false;
-
+  bool _isLoadingLocation = true;
   BitmapDescriptor userLocationIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _markerIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _toilet = BitmapDescriptor.defaultMarker;
   BitmapDescriptor toiletIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _parkingIcon = BitmapDescriptor.defaultMarker;
-  BitmapDescriptor _faculty = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor faculty = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _foodIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _classroomIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _serviceIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _libraryIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _atmIcon = BitmapDescriptor.defaultMarker;
   BitmapDescriptor _canteenIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor _sportIcon = BitmapDescriptor.defaultMarker;
+  BitmapDescriptor seven = BitmapDescriptor.defaultMarker;
   Timer? _routeUpdateTimer;
   bool _isRouteActive = false;
   bool _hasRequestedRoute = false;
@@ -78,8 +79,7 @@ class MapSampleState extends State<MapSample> {
 
   LatLng? _endLocation;
   final QuestionnaireDialogHelper questionnaire = QuestionnaireDialogHelper();
-  BitmapDescriptor _sportIcon = BitmapDescriptor.defaultMarker;
-  BitmapDescriptor _seven = BitmapDescriptor.defaultMarker;
+
   late GoogleMapController mapController;
   MapboxDirectionService _service = MapboxDirectionService();
   final MarkerController _markerController = MarkerController();
@@ -94,7 +94,6 @@ class MapSampleState extends State<MapSample> {
   void initState() {
     super.initState();
     _panelController = PanelController();
-    _setMarkerIcon();
     _initializeIcons();
     _initPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -107,12 +106,102 @@ class MapSampleState extends State<MapSample> {
     _pref = await SharedPreferencesService.getInstance();
   }
 
+  BitmapDescriptor getIconForType(String locationType) {
+    switch (locationType) {
+      case 'ห้องน้ำ':
+        return _toilet;
+      case 'จุดขายอาหารและเครื่องดื่ม':
+        return _foodIcon;
+      case 'ห้องเรียน':
+        return _classroomIcon;
+      case 'จุดบริการของมหาลัย':
+        return _serviceIcon;
+      case 'ห้องสมุด':
+        return _libraryIcon;
+      case 'ATM':
+        return _atmIcon;
+      case 'โรงอาหาร':
+        return _canteenIcon;
+      case 'สนามกีฬา':
+        return _sportIcon;
+      case 'ลานจอดรถ':
+        return _parkingIcon;
+      case 'เซเว่น':
+        return seven;
+      case 'ตึกคณะ/ภาควิชา':
+        return faculty;
+      default:
+        return BitmapDescriptor.defaultMarker;
+    }
+  }
+
 //โหลดไอคอนของหมวดหมู่ บางตัวที่ฟังชัน _showCategoryLocations ไม่สามารถแสดงออกมาได้
   Future<void> _initializeIcons() async {
-    _seven = await getResizedMarker('assets/iconCategory/seven.png', 125, 125);
+    // กำหนดค่าไอคอนทั้งหมด ยกเว้น seven, atm, faculty ที่จะใช้ getResizedMarker()
+    Map<String, String> iconPaths = {
+      'user': 'assets/Userlocation.png',
+      'toilet': 'assets/iconCategory/toilet1.png',
+      'parking': 'assets/iconCategory/parking.png',
+      'food': 'assets/iconCategory/foodDrink.png',
+      'classroom': 'assets/iconCategory/classroom.png',
+      'service': 'assets/iconCategory/Service.png',
+      'library': 'assets/iconCategory/Libra.png',
+      'canteen': 'assets/iconCategory/canteen.png',
+      'sport': 'assets/iconCategory/sport.png',
+    };
+
+    Map<String, int> iconSizes = {
+      'user': 125,
+      'toilet': 125,
+      'parking': 120,
+      'food': 125,
+      'classroom': 80,
+      'service': 150,
+      'library': 125,
+      'canteen': 125,
+      'sport': 125,
+    };
+
+    for (var key in iconPaths.keys) {
+      Uint8List iconData =
+          await getBytesFromAsset(iconPaths[key]!, iconSizes[key]!);
+      BitmapDescriptor icon = BitmapDescriptor.fromBytes(iconData);
+
+      switch (key) {
+        case 'user':
+          _markerIcon = icon;
+          break;
+        case 'toilet':
+          _toilet = icon;
+          break;
+        case 'parking':
+          _parkingIcon = icon;
+          break;
+        case 'food':
+          _foodIcon = icon;
+          break;
+        case 'classroom':
+          _classroomIcon = icon;
+          break;
+        case 'service':
+          _serviceIcon = icon;
+          break;
+        case 'library':
+          _libraryIcon = icon;
+          break;
+        case 'canteen':
+          _canteenIcon = icon;
+          break;
+        case 'sport':
+          _sportIcon = icon;
+          break;
+      }
+    }
+
+    // โหลด seven, atm, faculty ด้วย getResizedMarker()
+    seven = await getResizedMarker('assets/iconCategory/seven.png', 125, 125);
     _atmIcon = await getResizedMarker('assets/iconCategory/atm.png', 125, 125);
-    _faculty =
-        await getResizedMarker('assets/iconCategory/faculty.png', 125, 125);
+    faculty = await getResizedMarker('assets/faculty.png', 125, 125);
   }
 
   //โหลดข้อมูลรูป
@@ -142,10 +231,37 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+  Future<BitmapDescriptor> _getHighlightedIcon(
+      BitmapDescriptor baseIcon) async {
+    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(pictureRecorder);
+
+    final double size = 130.0;
+    final double iconSize = 100.0;
+
+    final Paint borderPaint = Paint()
+      ..color = Colors.green
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8.0;
+
+    // วาดวงกลม
+    canvas.drawCircle(Offset(size / 2, size / 2), size / 2, borderPaint);
+
+    final ui.Image newImage = await pictureRecorder
+        .endRecording()
+        .toImage(size.toInt(), size.toInt());
+
+    final ByteData? byteData =
+        await newImage.toByteData(format: ui.ImageByteFormat.png);
+    final Uint8List imageData = byteData!.buffer.asUint8List();
+
+    return BitmapDescriptor.fromBytes(imageData);
+  }
+
 //ฟังชันสำหรับแสดงหมวดหมู่สถานที่
   void _showCategoryLocations(String locationType) async {
     setState(() {
-      _markerController.clearMarkers(exceptId: 'currentLocation');
+      _markerController.clearMarkers();
     });
 
     try {
@@ -160,73 +276,69 @@ class MapSampleState extends State<MapSample> {
         return;
       }
 
-      for (var i = 0; i < snapshot.docs.length; i++) {
-        var doc = snapshot.docs[i];
-        var data = doc.data();
+      LatLng? nearestPosition;
+      double? minDistance;
+      Map<String, dynamic>? nearestData;
 
+      for (var doc in snapshot.docs) {
+        var data = doc.data();
         if (data.containsKey('latitude') &&
             data.containsKey('longitude') &&
             data.containsKey('namelocation')) {
           LatLng position = LatLng(data['latitude'], data['longitude']);
 
-          BitmapDescriptor markerIcon;
-          switch (locationType) {
-            case 'ห้องน้ำ':
-              markerIcon = _toilet;
-              break;
-            case 'จุดขายอาหารและเครื่องดื่ม':
-              markerIcon = _foodIcon;
-              break;
-            case 'ห้องเรียน':
-              markerIcon = _classroomIcon;
-              break;
-            case 'จุดบริการของมหาลัย':
-              markerIcon = _serviceIcon;
-              break;
-            case 'ห้องสมุด':
-              markerIcon = _libraryIcon;
-              break;
-            case 'ATM':
-              markerIcon = _atmIcon;
-              break;
-            case 'โรงอาหาร':
-              markerIcon = _canteenIcon;
-              break;
-            case 'สนามกีฬา':
-              markerIcon = _sportIcon;
-              break;
-            case 'ลานจอดรถ':
-              markerIcon = _parkingIcon;
-              break;
-            case 'เซเว่น':
-              markerIcon = _seven;
-              break;
-            case 'ตึกคณะ/ภาควิชา':
-              markerIcon = _faculty;
-              break;
-            default:
-              markerIcon = BitmapDescriptor.defaultMarker;
+          // 🔹 คำนวณหาจุดที่ใกล้ที่สุด
+          if (_currentPosition! != null) {
+            double distance = calculateDistance(
+              _currentPosition!.latitude,
+              _currentPosition!.longitude,
+              position.latitude,
+              position.longitude,
+            );
+            if (minDistance == null || distance < minDistance) {
+              minDistance = distance;
+              nearestPosition = position;
+              nearestData = data;
+            }
           }
 
-          setState(() {
-            _markerController.addMarker(
-              id: '${locationType}_${doc.id}',
-              position: position,
-              title: data['namelocation'],
-              icon: markerIcon,
-              onTap: (LatLng tappedPosition) {
-                _onMarkerTap(tappedPosition, data['namelocation']);
-              },
-            );
-          });
+          // 🔹 ใช้ไอคอนปกติ
+          BitmapDescriptor markerIcon = getIconForType(locationType);
+
+          _markerController.addMarker(
+            id: '${locationType}_${doc.id}',
+            position: position,
+            title: data['namelocation'],
+            icon: markerIcon,
+            onTap: (LatLng tappedPosition) {
+              _onMarkerTap(tappedPosition, data['namelocation']);
+            },
+          );
         }
       }
 
-      var firstDoc = snapshot.docs.first.data();
-      var firstPosition = LatLng(firstDoc['latitude'], firstDoc['longitude']);
+      // 🔥 ถ้ามีจุดที่ใกล้ที่สุด ให้ทำให้โดดเด่นขึ้น
+      if (nearestPosition != null && nearestData != null) {
+        BitmapDescriptor highlightedIcon =
+            await _getHighlightedIcon(getIconForType(locationType));
 
-      final GoogleMapController controller = await _controller.future;
-      controller.animateCamera(CameraUpdate.newLatLngZoom(firstPosition, 16));
+        setState(() {
+          _markerController.addMarker(
+            id: 'nearest_${locationType}',
+            position: nearestPosition!,
+            title: '${nearestData!['namelocation']} (ใกล้ที่สุด)',
+            icon: highlightedIcon,
+            onTap: (LatLng tappedPosition) {
+              _onMarkerTap(tappedPosition, nearestData!['namelocation']);
+            },
+          );
+        });
+
+        // 🔍 โฟกัสไปที่จุดที่ใกล้ที่สุด
+        final GoogleMapController controller = await _controller.future;
+        controller
+            .animateCamera(CameraUpdate.newLatLngZoom(nearestPosition!, 17));
+      }
     } catch (e) {
       print('Error loading $locationType locations: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -252,42 +364,42 @@ class MapSampleState extends State<MapSample> {
   }
 
 //เซ็ท Icon ของ Marker id ต่า่งๆ
-  Future<void> _setMarkerIcon() async {
-    final Uint8List markerIcon =
-        await getBytesFromAsset('assets/Userlocation.png', 125);
-    _markerIcon = BitmapDescriptor.fromBytes(markerIcon);
+  // Future<void> _setMarkerIcon() async {
+  //   final Uint8List markerIcon =
+  //       await getBytesFromAsset('assets/Userlocation.png', 125);
+  //   _markerIcon = BitmapDescriptor.fromBytes(markerIcon);
 
-    final Uint8List toiletIcon =
-        await getBytesFromAsset('assets/iconCategory/toilet1.png', 125);
-    _toilet = BitmapDescriptor.fromBytes(toiletIcon);
+  //   final Uint8List toiletIcon =
+  //       await getBytesFromAsset('assets/iconCategory/toilet1.png', 125);
+  //   _toilet = BitmapDescriptor.fromBytes(toiletIcon);
 
-    final Uint8List parkingIcon =
-        await getBytesFromAsset('assets/iconCategory/parking.png', 110);
-    _parkingIcon = BitmapDescriptor.fromBytes(parkingIcon);
+  //   final Uint8List parkingIcon =
+  //       await getBytesFromAsset('assets/iconCategory/parking.png', 110);
+  //   _parkingIcon = BitmapDescriptor.fromBytes(parkingIcon);
 
-    final Uint8List foodIcon =
-        await getBytesFromAsset('assets/iconCategory/foodDrink.png', 125);
-    _foodIcon = BitmapDescriptor.fromBytes(foodIcon);
+  //   final Uint8List foodIcon =
+  //       await getBytesFromAsset('assets/iconCategory/foodDrink.png', 125);
+  //   _foodIcon = BitmapDescriptor.fromBytes(foodIcon);
 
-    final Uint8List classroomIcon =
-        await getBytesFromAsset('assets/iconCategory/classroom.png', 100);
-    _classroomIcon = BitmapDescriptor.fromBytes(classroomIcon);
+  //   final Uint8List classroomIcon =
+  //       await getBytesFromAsset('assets/iconCategory/classroom.png', 100);
+  //   _classroomIcon = BitmapDescriptor.fromBytes(classroomIcon);
 
-    final Uint8List serviceIcon =
-        await getBytesFromAsset('assets/iconCategory/Service.png', 150);
-    _serviceIcon = BitmapDescriptor.fromBytes(serviceIcon);
+  //   final Uint8List serviceIcon =
+  //       await getBytesFromAsset('assets/iconCategory/Service.png', 150);
+  //   _serviceIcon = BitmapDescriptor.fromBytes(serviceIcon);
 
-    final Uint8List libraryIcon =
-        await getBytesFromAsset('assets/iconCategory/Libra.png', 125);
-    _libraryIcon = BitmapDescriptor.fromBytes(libraryIcon);
-    final Uint8List canteenIcon =
-        await getBytesFromAsset('assets/iconCategory/canteen.png', 125);
-    _canteenIcon = BitmapDescriptor.fromBytes(canteenIcon);
+  //   final Uint8List libraryIcon =
+  //       await getBytesFromAsset('assets/iconCategory/Libra.png', 125);
+  //   _libraryIcon = BitmapDescriptor.fromBytes(libraryIcon);
+  //   final Uint8List canteenIcon =
+  //       await getBytesFromAsset('assets/iconCategory/canteen.png', 125);
+  //   _canteenIcon = BitmapDescriptor.fromBytes(canteenIcon);
 
-    final Uint8List sportIcon =
-        await getBytesFromAsset('assets/iconCategory/sport.png', 125);
-    _sportIcon = BitmapDescriptor.fromBytes(sportIcon);
-  }
+  //   final Uint8List sportIcon =
+  //       await getBytesFromAsset('assets/iconCategory/sport.png', 125);
+  //   _sportIcon = BitmapDescriptor.fromBytes(sportIcon);
+  // }
 
   @override
   void dispose() {
@@ -333,7 +445,7 @@ class MapSampleState extends State<MapSample> {
         }
 
         if (userData != null && userData.isNotEmpty) {
-          Navigator.pushReplacement(
+          Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ChatScreen(),
@@ -353,7 +465,7 @@ class MapSampleState extends State<MapSample> {
       }
 
       print('Navigating to LoginScreen');
-      Navigator.pushReplacement(
+      Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => WelcomeScreen(),
@@ -402,13 +514,13 @@ class MapSampleState extends State<MapSample> {
                 });
               },
             ),
-          IconButton(
-            icon: Icon(Icons.gps_fixed),
-            onPressed: () {
-              zoom(_currentPosition!);
-              _requestLocationPermission(context);
-            },
-          ),
+          // IconButton(
+          //   icon: Icon(Icons.gps_fixed),
+          //   onPressed: () {
+          //     zoom(_currentPosition!);
+          //     _requestLocationPermission(context);
+          //   },
+          // ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -437,15 +549,10 @@ class MapSampleState extends State<MapSample> {
       body: Stack(
         children: [
           GoogleMap(
+            myLocationButtonEnabled: true,
             mapType: MapType.satellite,
-            markers: Set<Marker>.from(_markerController.markers)
-              ..addAll([
-                if (_currentPosition != null)
-                  Marker(
-                      markerId: MarkerId('currentLocation'),
-                      position: _currentPosition!,
-                      icon: _markerIcon),
-              ]),
+            myLocationEnabled: true,
+            markers: Set<Marker>.from(_markerController.markers)..addAll([]),
             indoorViewEnabled: true,
             initialCameraPosition: university,
             polylines: _polylines,
@@ -583,87 +690,143 @@ class MapSampleState extends State<MapSample> {
                         ),
                       ],
                     ),
-                    child: ListView.builder(
-                      itemCount: filteredDocs.length,
-                      itemBuilder: (context, index) {
-                        try {
-                          final doc = filteredDocs[index].data();
-                          final hasRequiredFields =
-                              doc.containsKey('namelocation') &&
-                                  doc.containsKey('latitude') &&
-                                  doc.containsKey('longitude') &&
-                                  doc.containsKey('detail');
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: filteredDocs.length,
+                            itemBuilder: (context, index) {
+                              try {
+                                final doc = filteredDocs[index].data();
+                                final hasRequiredFields =
+                                    doc.containsKey('namelocation') &&
+                                        doc.containsKey('latitude') &&
+                                        doc.containsKey('longitude') &&
+                                        doc.containsKey('detail');
 
-                          if (!hasRequiredFields) {
-                            return ListTile(
-                              title: Text('ข้อมูลไม่ครบถ้วน'),
-                              tileColor: Colors.grey[100],
-                            );
-                          }
+                                if (!hasRequiredFields) {
+                                  return ListTile(
+                                    title: Text('ข้อมูลไม่ครบถ้วน'),
+                                    tileColor: Colors.grey[100],
+                                  );
+                                }
 
-                          return GestureDetector(
-                            onTap: () async {
-                              var selectedLocation = doc['namelocation'];
-                              var latitude = doc['latitude'];
-                              var longitude = doc['longitude'];
-                              var detail = doc['detail'];
-                              LatLng destinationLatLng =
-                                  LatLng(latitude, longitude);
-                              zoom(destinationLatLng);
-                              setState(() {
-                                _destinationLatLng = destinationLatLng;
-                                _destination = selectedLocation;
+                                String distanceText = '';
+                                if (_currentPosition != null) {
+                                  try {
+                                    double latitude = double.parse(
+                                        doc['latitude'].toString());
+                                    double longitude = double.parse(
+                                        doc['longitude'].toString());
 
-                                _markerController.addMarker(
-                                  id: 'destination_$index',
-                                  position: destinationLatLng,
-                                  title: selectedLocation,
-                                  icon: BitmapDescriptor.defaultMarker,
-                                  onTap: (LatLng tappedPosition) {
-                                    _markers.clear();
-                                    _onMarkerTap(
-                                        tappedPosition, selectedLocation);
+                                    double distance = calculateDistance(
+                                      _currentPosition!.latitude,
+                                      _currentPosition!.longitude,
+                                      latitude,
+                                      longitude,
+                                    );
+
+                                    if (distance < 1) {
+                                      distanceText =
+                                          'ระยะทางโดยประมาณ :(${(distance * 1000).toStringAsFixed(0)} เมตร)';
+                                    } else {
+                                      distanceText =
+                                          'ระยะทางโดยประมาณ :(${distance.toStringAsFixed(1)} กม.)';
+                                    }
+                                  } catch (e) {
+                                    distanceText = '(ไม่สามารถคำนวณระยะทางได้)';
+                                  }
+                                } else if (!_isLoadingLocation) {
+                                  distanceText = '(ไม่พบตำแหน่งปัจจุบัน)';
+                                }
+
+                                return GestureDetector(
+                                  onTap: () async {
+                                    var selectedLocation = doc['namelocation'];
+                                    var latitude = doc['latitude'];
+                                    var longitude = doc['longitude'];
+                                    var detail = doc['detail'];
+                                    LatLng destinationLatLng =
+                                        LatLng(latitude, longitude);
+                                    zoom(destinationLatLng);
+                                    setState(() {
+                                      _destinationLatLng = destinationLatLng;
+                                      _destination = selectedLocation;
+
+                                      _markerController.addMarker(
+                                        id: 'destination_$index',
+                                        position: destinationLatLng,
+                                        title: selectedLocation,
+                                        icon: BitmapDescriptor.defaultMarker,
+                                        onTap: (LatLng tappedPosition) {
+                                          _markers.clear();
+                                          _onMarkerTap(
+                                              tappedPosition, selectedLocation);
+                                        },
+                                      );
+                                    });
+
+                                    textFieldOnTap(
+                                        _searchController,
+                                        selectedLocation,
+                                        setState,
+                                        _searchText);
+                                    _searchController.clear();
+                                    _searchText = '';
                                   },
-                                );
-                              });
-
-                              textFieldOnTap(_searchController,
-                                  selectedLocation, setState, _searchText);
-                              _searchController.clear();
-                              _searchText = '';
-                            },
-                            child: Container(
-                              margin: EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.grey.withOpacity(0.2),
-                                ),
-                              ),
-                              child: ListTile(
-                                title: Text(
-                                  doc['namelocation'],
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
+                                  child: Container(
+                                    margin: EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.grey.withOpacity(0.2),
+                                      ),
+                                    ),
+                                    child: ListTile(
+                                      title: Text(
+                                        doc['namelocation'],
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            doc['detail'],
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (distanceText.isNotEmpty)
+                                            Text(
+                                              distanceText,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: _isLoadingLocation
+                                                    ? Colors.grey
+                                                    : Colors.blue,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
-                                subtitle: Text(
-                                  doc['detail'],
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          );
-                        } catch (e) {
-                          return ListTile(
-                            title: Text('เกิดข้อผิดพลาดในการแสดงข้อมูล'),
-                            tileColor: Colors.red[50],
-                          );
-                        }
-                      },
+                                );
+                              } catch (e) {
+                                return ListTile(
+                                  title: Text('เกิดข้อผิดพลาดในการแสดงข้อมูล'),
+                                  subtitle: Text(e.toString(),
+                                      style: TextStyle(fontSize: 10)),
+                                  tileColor: Colors.red[50],
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -773,13 +936,22 @@ class MapSampleState extends State<MapSample> {
     });
 
     if (_isRouteActive) {
+      double bearing = calculateBearing(_currentPosition!, destinationLatLng);
+
       final GoogleMapController controller = await _controller.future;
       controller.animateCamera(
-        CameraUpdate.newLatLngZoom(currentPosition, 20),
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: _currentPosition!,
+            zoom: 20, // ระดับการซูม
+            tilt: 60, // ความเอียงของมุมกล้อง
+            bearing: bearing, // หมุนแผนที่ตามเส้นทาง
+          ),
+        ),
       );
     }
 
-    final directionController = DirectionController(
+    final directionController = Walkdirectionservice(
       onRouteFetched: (polylineCoordinates, steps) {
         if (polylineCoordinates.isEmpty) {
           showErrorWalkError();
@@ -873,7 +1045,7 @@ class MapSampleState extends State<MapSample> {
     if (_currentPosition == null || _endLocation == null) return;
 
     try {
-      List<LatLng> newRoute = await DirectionService.getRoute(
+      List<LatLng> newRoute = await Cardirectionservice.getRoute(
           _currentPosition!, _endLocation!, 'Destination');
 
       if (newRoute.isNotEmpty) {
@@ -993,8 +1165,17 @@ class MapSampleState extends State<MapSample> {
 
                   final GoogleMapController controller =
                       await _controller.future;
+                  double bearing =
+                      calculateBearing(_currentPosition!, endLocation);
                   controller.animateCamera(
-                    CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(
+                        target: _currentPosition!,
+                        zoom: 20, // ระดับการซูม
+                        tilt: 60, // ความเอียงของมุมกล้อง
+                        bearing: bearing, // หมุนแผนที่ตามเส้นทาง
+                      ),
+                    ),
                   );
 
                   startUpdatingRoute(
@@ -1026,8 +1207,17 @@ class MapSampleState extends State<MapSample> {
                   _isRouteActive = true;
                   final GoogleMapController controller =
                       await _controller.future;
+                  double bearing =
+                      calculateBearing(_currentPosition!, endLocation);
                   controller.animateCamera(
-                    CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(
+                        target: _currentPosition!,
+                        zoom: 20, // ระดับการซูม
+                        tilt: 60, // ความเอียงของมุมกล้อง
+                        bearing: bearing, // หมุนแผนที่ตามเส้นทาง
+                      ),
+                    ),
                   );
                   _fetchRouteFromApiOnce(
                       _currentPosition!, endLocation, destination);
@@ -1048,6 +1238,21 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+  double calculateBearing(LatLng start, LatLng end) {
+    final double lat1 = start.latitude * pi / 180;
+    final double lon1 = start.longitude * pi / 180;
+    final double lat2 = end.latitude * pi / 180;
+    final double lon2 = end.longitude * pi / 180;
+
+    final double dLon = lon2 - lon1;
+
+    final double y = sin(dLon) * cos(lat2);
+    final double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
+    final double bearing = atan2(y, x) * 180 / pi;
+
+    return (bearing + 360) % 360; // ให้ค่าอยู่ในช่วง 0-360 องศา
+  }
+
   // Update เส้นทางหมวดรถที่Call Api มาจาก MapBox Direction Api เรียกทุกๆ2วินาทีและอัพเดทเมื่อ currentPosition เปลี่ยนพิกัด
   Future<void> startUpdatingRoute(
       double startLat,
@@ -1057,12 +1262,21 @@ class MapSampleState extends State<MapSample> {
       Function(List<List<double>>) onUpdate) async {
     LatLng? _lastPosition;
     _isRouteActive = true;
-
+    LatLng endLocation = LatLng(endLat, endLng);
     _timer?.cancel();
     _timer = Timer.periodic(Duration(seconds: 2), (timer) async {
       final GoogleMapController controller = await _controller.future;
+
+      double bearing = calculateBearing(_currentPosition!, endLocation);
       controller.animateCamera(
-        CameraUpdate.newLatLngZoom(_currentPosition!, 20),
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: _currentPosition!,
+            zoom: 20, // ระดับการซูม
+            tilt: 60, // ความเอียงของมุมกล้อง
+            bearing: bearing, // หมุนแผนที่ตามเส้นทาง
+          ),
+        ),
       );
       try {
         if (_currentPosition == null) return;
@@ -1095,6 +1309,22 @@ class MapSampleState extends State<MapSample> {
 
   void stopUpdatingRoute() {
     _timer?.cancel();
+  }
+
+  void updateCameraToFollowRoute(LatLng newPosition, LatLng destination) async {
+    final GoogleMapController controller = await _controller.future;
+    double bearing = calculateBearing(newPosition, destination);
+
+    controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: newPosition,
+          zoom: 18,
+          tilt: 60,
+          bearing: bearing,
+        ),
+      ),
+    );
   }
 
   void _showArrivalDialog() {
@@ -1285,7 +1515,7 @@ class MapSampleState extends State<MapSample> {
   }
 
   double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const R = 6371e3;
+    const double R = 6371;
     final phi1 = lat1 * pi / 180;
     final phi2 = lat2 * pi / 180;
     final deltaPhi = (lat2 - lat1) * pi / 180;
@@ -1295,6 +1525,6 @@ class MapSampleState extends State<MapSample> {
         cos(phi1) * cos(phi2) * sin(deltaLambda / 2) * sin(deltaLambda / 2);
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
-    return R * c;
+    return R * c; // ผลลัพธ์เป็นกิโลเมตร
   }
 }

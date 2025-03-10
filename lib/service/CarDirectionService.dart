@@ -5,7 +5,7 @@ import 'dart:math';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
-class DirectionService {
+class Cardirectionservice {
   static const String apiKey =
       "5b3ce3597851110001cf6248fa49e44af4634d66a806d21a70336dbb";
   static const String baseUrl =
@@ -90,13 +90,12 @@ class RouteTrackingService {
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       try {
         // Get updated route
-        List<LatLng> route = await DirectionService.getRoute(
+        List<LatLng> route = await Cardirectionservice.getRoute(
           currentLocation,
           destination,
           destinationName,
         );
 
-        // Calculate distance to destination
         if (route.isNotEmpty) {
           double distanceToDestination = _calculateDistance(
             currentLocation,

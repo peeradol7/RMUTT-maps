@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 
-import 'model/usermodel.dart';
+import '../model/usermodel.dart';
 
 class PasswordResetDialog extends StatefulWidget {
   final UserModel user;

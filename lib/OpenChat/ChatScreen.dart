@@ -5,7 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:maps/OpenChat/Login.dart';
-import 'package:maps/OpenChat/model/usermodel.dart';
+import 'package:maps/model/usermodel.dart';
 
 import 'PasswordResetDialog.dart';
 import 'sharepreferenceservice.dart';
@@ -21,7 +21,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ScrollController _scrollController = ScrollController();
-  late UserModel _user;
+  UserModel? _user;
   bool _isLoading = true;
 
   @override
@@ -42,17 +42,15 @@ class _ChatScreenState extends State<ChatScreen> {
           await SharedPreferencesService.getInstance();
       UserModel? user = await prefs.getStoredUserData();
 
-      if (user != null) {
-        setState(() {
-          _user = user;
-          _isLoading = false;
-        });
-      } else {
-        _logout();
-      }
+      setState(() {
+        _user = user!;
+        _isLoading = false;
+      });
     } catch (e) {
       print('Error loading user data: $e');
-      _logout();
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -90,26 +88,18 @@ class _ChatScreenState extends State<ChatScreen> {
     SharedPreferencesService prefs =
         await SharedPreferencesService.getInstance();
 
-    print('Logging out... Clearing SharedPreferences');
     await prefs.clearLoginData();
-    print('SharedPreferences cleared successfully.');
 
     if (context.mounted) {
-      print('Navigating to LoginScreen...');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => LoginScreen()),
       );
-    } else {
-      print('Context not mounted, cannot navigate.');
-    }
+    } else {}
   }
 
   Future<void> _resetPassword(String hashedPassword) async {
     try {
-      // ใช้ hashedPassword ที่ได้รับมาเลย ไม่ต้อง hash ใหม่
-
-      // Update password in Firestore
       await _firestore
           .collection('usersRMUTT')
           .where('username', isEqualTo: _user?.username)
@@ -122,17 +112,15 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      // Update local user model
       if (_user != null) {
         UserModel updatedUser = UserModel(
           userId: _user!.userId,
           username: _user!.username,
           name: _user!.name,
-          password: hashedPassword, // ใช้ค่าที่ได้รับมาเลย
+          password: hashedPassword,
           phoneNumber: _user!.phoneNumber,
         );
 
-        // Update SharedPreferences
         SharedPreferencesService prefs =
             await SharedPreferencesService.getInstance();
         await prefs.saveLoginData(updatedUser);
@@ -167,44 +155,46 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: Colors.teal,
         elevation: 0,
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.teal,
-              ),
-              child: Text(
-                'เมนู',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: Icon(Icons.password),
-              title: Text('รีเซ็ทรหัสผ่าน'),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                showDialog(
-                  context: context,
-                  builder: (context) => PasswordResetDialog(
-                    user: _user!,
-                    onPasswordReset: _resetPassword,
+      drawer: _user != null
+          ? Drawer(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  DrawerHeader(
+                    decoration: BoxDecoration(
+                      color: Colors.teal,
+                    ),
+                    child: Text(
+                      'เมนู',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                      ),
+                    ),
                   ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.logout),
-              title: Text('ออกจากระบบ'),
-              onTap: _logout,
-            ),
-          ],
-        ),
-      ),
+                  ListTile(
+                    leading: Icon(Icons.password),
+                    title: Text('รีเซ็ทรหัสผ่าน'),
+                    onTap: () {
+                      Navigator.pop(context); // Close drawer
+                      showDialog(
+                        context: context,
+                        builder: (context) => PasswordResetDialog(
+                          user: _user!,
+                          onPasswordReset: _resetPassword,
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.logout),
+                    title: Text('ออกจากระบบ'),
+                    onTap: _logout,
+                  ),
+                ],
+              ),
+            )
+          : null,
       body: Column(
         children: [
           Expanded(
@@ -226,7 +216,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   controller: _scrollController,
                   children: snapshot.data!.docs.map((doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    bool isMe = data['senderUsername'] == _user.username;
+                    bool isMe = data['senderUsername'] == _user?.username;
 
                     var timestamp = data['timestamp'] != null
                         ? DateFormat('dd MMM yyyy HH:mm')
@@ -281,30 +271,32 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+            child: _user?.userId != null
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _messageController,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            labelText: 'พิมพ์ข้อความ . . .',
+                            labelStyle: TextStyle(color: Colors.teal),
+                          ),
+                        ),
                       ),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      labelText: 'พิมพ์ข้อความ . . .',
-                      labelStyle: TextStyle(color: Colors.teal),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 8),
-                IconButton(
-                  icon: Icon(Icons.send),
-                  color: Colors.teal,
-                  onPressed: _sendMessage,
-                ),
-              ],
-            ),
+                      SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(Icons.send),
+                        color: Colors.teal,
+                        onPressed: _sendMessage,
+                      ),
+                    ],
+                  )
+                : SizedBox.shrink(), // ซ่อนแถบข้อความเมื่อไม่มี user
           ),
         ],
       ),

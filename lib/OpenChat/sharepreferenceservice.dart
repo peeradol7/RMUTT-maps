@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:maps/OpenChat/model/usermodel.dart';
+import 'package:maps/model/usermodel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesService {

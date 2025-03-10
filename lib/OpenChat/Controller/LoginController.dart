@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:maps/OpenChat/model/usermodel.dart';
+import 'package:maps/model/usermodel.dart';
 
 import '../sharepreferenceservice.dart';
 
