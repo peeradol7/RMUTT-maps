@@ -12,6 +12,8 @@ import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
 import 'package:maps/service/WalkDirectionService.dart';
+import 'package:permission_handler/permission_handler.dart'
+    show openAppSettings;
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
 import '../MapboxDirectionService.dart';
@@ -72,6 +74,7 @@ class MapSampleState extends State<MapSample> {
   BitmapDescriptor seven = BitmapDescriptor.defaultMarker;
   Timer? _routeUpdateTimer;
   bool _isRouteActive = false;
+  bool _hasGPSPermission = false;
   bool _hasRequestedRoute = false;
   Timer? _locationUpdateTimer;
   LatLng? _savedDestination;
@@ -97,8 +100,9 @@ class MapSampleState extends State<MapSample> {
     _panelController = PanelController();
     _initializeIcons();
     _initPreferences();
+    _checkInitialPermissionStatus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _requestLocationPermission(context);
+      _requestLocationPermission();
     });
   }
 
@@ -514,6 +518,27 @@ class MapSampleState extends State<MapSample> {
                 });
               },
             ),
+          Container(
+            child: _hasGPSPermission
+                ? Container()
+                : GestureDetector(
+                    onTap: () => _requestLocationPermission(),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.blue,
+                      ),
+                      padding: EdgeInsets.all(10),
+                      child: IconButton(
+                        color: Colors.white,
+                        onPressed: () {
+                          _requestLocationPermission();
+                        },
+                        icon: Icon(Icons.gps_fixed),
+                      ),
+                    ),
+                  ),
+          ),
           // IconButton(
           //   icon: Icon(Icons.gps_fixed),
           //   onPressed: () {
@@ -563,6 +588,7 @@ class MapSampleState extends State<MapSample> {
               _controller.complete(controller);
             },
           ),
+
           Positioned(
             left: 4.0,
             bottom: 8.0,
@@ -669,6 +695,7 @@ class MapSampleState extends State<MapSample> {
                 ),
               ),
             ),
+
           //ค้นหาชื่อสถานที่โดยเอา Container มาวางในจุด ของ Positioned
           if (_searchText.isEmpty)
             Container()
@@ -881,33 +908,95 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
-//ขอสิทธิ์เข้าถึง GPS
-  Future<void> _requestLocationPermission(BuildContext context) async {
+  Future<void> _checkInitialPermissionStatus() async {
     try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      setState(() {
+        _hasGPSPermission = permission != LocationPermission.denied &&
+            permission != LocationPermission.deniedForever;
+      });
+    } catch (e) {
+      print("Error checking initial permission: $e");
+    }
+  }
+
+//ขอสิทธิ์เข้าถึง GPS
+  Future<void> _requestLocationPermission() async {
+    try {
+      // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      print('Location Services Enabled: $serviceEnabled');
+
       if (!serviceEnabled) {
-        // แจ้งให้ผู้ใช้เปิด GPS
+        print('Location services are disabled');
         _showGPSDialog(context);
-        throw Exception('Location services are disabled.');
+        return;
       }
 
+      // Check current permission status
       LocationPermission permission = await Geolocator.checkPermission();
+      print('Initial Permission Status: $permission');
+
+      // Handle permanently denied permission
+      if (permission == LocationPermission.deniedForever) {
+        print('Permission is permanently denied');
+        _showPermissionPermanentlyDeniedDialog(context);
+        return;
+      }
+
+      // If permission is initially denied
       if (permission == LocationPermission.denied) {
+        print('Permission was denied, requesting permission now');
         permission = await Geolocator.requestPermission();
+        print('Permission after request: $permission');
+
         if (permission == LocationPermission.denied) {
-          throw Exception('Location permissions are denied');
+          print('Permission still denied after request');
+          return;
         }
       }
 
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are permanently denied.');
-      }
+      // If we've reached this point, permission is granted
+      print('Location Permission Granted!');
+      setState(() {
+        _hasGPSPermission = true;
+      });
 
-      // เริ่มติดตามตำแหน่ง
+      // Start tracking location
       startTrackingLocation();
     } catch (e) {
-      print("เกิดข้อผิดพลาด: $e");
+      print("Comprehensive Error in Permission Request: $e");
+      print("Error Type: ${e.runtimeType}");
     }
+  }
+
+  void _showPermissionPermanentlyDeniedDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('การอนุญาตให้ใช้ตำแหน่งถูกปฏิเสธ'),
+          content: Text(
+            'การอนุญาตให้ใช้ตำแหน่งถูกปฏิเสธอย่างถาวร กรุณาเปิดใช้งานในการตั้งค่าของแอปด้วยตนเอง',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('เปิดการตั้งค่าแอป'),
+              onPressed: () {
+                openAppSettings();
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: Text('ยกเลิก'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void resetRouteRequest() {
@@ -934,7 +1023,7 @@ class MapSampleState extends State<MapSample> {
             TextButton(
               child: Text('ตกลง'),
               onPressed: () {
-                _requestLocationPermission(context);
+                _requestLocationPermission();
                 Navigator.of(context).pop(); // ปิด Dialog
               },
             ),
