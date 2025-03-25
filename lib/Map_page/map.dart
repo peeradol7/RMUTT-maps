@@ -100,6 +100,7 @@ class MapSampleState extends State<MapSample> {
     _panelController = PanelController();
     _initializeIcons();
     _initPreferences();
+    _checkInitialPermissionStatus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestLocationPermission();
     });
@@ -987,7 +988,7 @@ class MapSampleState extends State<MapSample> {
               },
             ),
             TextButton(
-              child: Text('ยกเลิก'),
+              child: Text('Cancel'),
               onPressed: () {
                 Navigator.of(context).pop();
               },
