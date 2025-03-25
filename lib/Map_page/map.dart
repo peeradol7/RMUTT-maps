@@ -77,7 +77,6 @@ class MapSampleState extends State<MapSample> {
   LatLng? _savedDestination;
   String? _savedDestinationName;
   bool _isBearingActive = true;
-
   LatLng? _endLocation;
   final QuestionnaireDialogHelper questionnaire = QuestionnaireDialogHelper();
 
@@ -91,6 +90,7 @@ class MapSampleState extends State<MapSample> {
   StreamSubscription<Position>? _locationSubscription;
   List<LatLng> _currentPolylinePoints = [];
   late SharedPreferencesService _pref;
+
   @override
   void initState() {
     super.initState();
@@ -934,6 +934,7 @@ class MapSampleState extends State<MapSample> {
             TextButton(
               child: Text('ตกลง'),
               onPressed: () {
+                _requestLocationPermission(context);
                 Navigator.of(context).pop(); // ปิด Dialog
               },
             ),
