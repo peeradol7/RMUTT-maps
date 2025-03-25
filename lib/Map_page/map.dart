@@ -100,7 +100,6 @@ class MapSampleState extends State<MapSample> {
     _panelController = PanelController();
     _initializeIcons();
     _initPreferences();
-    _checkInitialPermissionStatus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestLocationPermission();
     });
