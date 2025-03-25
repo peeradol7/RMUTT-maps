@@ -102,11 +102,9 @@ class RouteTrackingService {
             destination,
           );
 
-          // Update route
           onRouteUpdate(route);
 
-          // Check if destination is reached (within 50 meters)
-          if (distanceToDestination <= 50) {
+          if (distanceToDestination <= 100) {
             print('ถึงปลายทางแล้ว');
             onDestinationReached();
             stopRouteTracking();

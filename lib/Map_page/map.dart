@@ -76,6 +76,7 @@ class MapSampleState extends State<MapSample> {
   Timer? _locationUpdateTimer;
   LatLng? _savedDestination;
   String? _savedDestinationName;
+  bool _isBearingActive = true;
 
   LatLng? _endLocation;
   final QuestionnaireDialogHelper questionnaire = QuestionnaireDialogHelper();
@@ -101,7 +102,6 @@ class MapSampleState extends State<MapSample> {
     });
   }
 
-// เรียก Instance ของ  SharedPreferences
   Future<void> _initPreferences() async {
     _pref = await SharedPreferencesService.getInstance();
   }
@@ -599,6 +599,19 @@ class MapSampleState extends State<MapSample> {
                       _timer?.cancel();
                       _isLoadingRoute = false;
                       _steps.clear();
+                      _isBearingActive = !_isBearingActive;
+                      _controller.future.then((controller) {
+                        controller.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target: _currentPosition!,
+                              zoom: 19,
+                              tilt: 0,
+                              bearing: 0,
+                            ),
+                          ),
+                        );
+                      });
                     });
                   },
                   child: Text(
@@ -614,8 +627,8 @@ class MapSampleState extends State<MapSample> {
                       'currentLocation') &&
               _polylines.isEmpty)
             Positioned(
-              top: 5,
-              right: 16.0,
+              top: 60,
+              right: 10.0,
               child: SizedBox(
                 width: 100.0,
                 height: 35,
@@ -624,6 +637,29 @@ class MapSampleState extends State<MapSample> {
                     setState(() {
                       _markerController.clearMarkers(
                           exceptId: 'currentLocation');
+                      _polylines.clear();
+                      _showCancelButton = false;
+                      _markers.clear();
+                      _showPanel = false;
+                      _cancelRoute();
+                      _routeUpdateTimer?.cancel();
+                      _routeUpdateTimer = null;
+                      _timer?.cancel();
+                      _isLoadingRoute = false;
+                      _steps.clear();
+                      _isBearingActive = true;
+                      _controller.future.then((controller) {
+                        controller.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target: _currentPosition!,
+                              zoom: 19,
+                              tilt: 0,
+                              bearing: 0,
+                            ),
+                          ),
+                        );
+                      });
                     });
                   },
                   child: const Text('ปิดจุดมาร์ค'),
@@ -649,19 +685,23 @@ class MapSampleState extends State<MapSample> {
                 var filteredDocs = snapshot.data!.docs.where((doc) {
                   try {
                     if (!doc.data().containsKey('namelocation') ||
-                        !doc.data().containsKey('type')) {
+                        !doc.data().containsKey('type') ||
+                        !doc.data().containsKey('detail')) {
                       return false;
                     }
 
                     String locationName =
                         doc['namelocation'].toString().toLowerCase();
                     String locationType = doc['type'].toString().toLowerCase();
+                    String locationDetail =
+                        doc['detail'].toString().toLowerCase();
                     String searchQuery = _searchText.toLowerCase().trim();
 
                     if (_searchType != null) {
                       return locationType == _searchType;
                     } else {
-                      return locationName.contains(searchQuery);
+                      return locationName.contains(searchQuery) ||
+                          locationDetail.contains(searchQuery);
                     }
                   } catch (e) {
                     return false;
@@ -674,7 +714,7 @@ class MapSampleState extends State<MapSample> {
 
                 return Positioned(
                   top: 0,
-                  left: 16.0,
+                  left: 10.0,
                   right: 16.0,
                   child: Container(
                     height: 300,
@@ -739,7 +779,6 @@ class MapSampleState extends State<MapSample> {
                                 } else if (!_isLoadingLocation) {
                                   distanceText = '(ไม่พบตำแหน่งปัจจุบัน)';
                                 }
-
                                 return GestureDetector(
                                   onTap: () async {
                                     var selectedLocation = doc['namelocation'];
@@ -748,18 +787,23 @@ class MapSampleState extends State<MapSample> {
                                     var detail = doc['detail'];
                                     LatLng destinationLatLng =
                                         LatLng(latitude, longitude);
-                                    zoom(destinationLatLng);
+
+                                    setState(() {
+                                      _markers.clear();
+                                      _markerController.clearMarkers();
+                                    });
+
+                                    await zoom(destinationLatLng);
                                     setState(() {
                                       _destinationLatLng = destinationLatLng;
                                       _destination = selectedLocation;
 
                                       _markerController.addMarker(
-                                        id: 'destination_$index',
+                                        id: 'destination',
                                         position: destinationLatLng,
                                         title: selectedLocation,
                                         icon: BitmapDescriptor.defaultMarker,
                                         onTap: (LatLng tappedPosition) {
-                                          _markers.clear();
                                           _onMarkerTap(
                                               tappedPosition, selectedLocation);
                                         },
@@ -928,6 +972,8 @@ class MapSampleState extends State<MapSample> {
   // Fetch เส้นทางจาก API โหมดเดิน
   void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
       String destination) async {
+    final GoogleMapController controller = await _controller.future;
+
     if (_isLoadingRoute || !_isRouteActive) return;
     print('_isRouteActive: $_isRouteActive');
 
@@ -936,16 +982,17 @@ class MapSampleState extends State<MapSample> {
     });
 
     if (_isRouteActive) {
-      double bearing = calculateBearing(_currentPosition!, destinationLatLng);
+      double bearing = _isBearingActive
+          ? calculateBearing(_currentPosition!, destinationLatLng)
+          : 0;
 
-      final GoogleMapController controller = await _controller.future;
       controller.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: _currentPosition!,
-            zoom: 20, // ระดับการซูม
-            tilt: 60, // ความเอียงของมุมกล้อง
-            bearing: bearing, // หมุนแผนที่ตามเส้นทาง
+            zoom: 20,
+            tilt: 60,
+            bearing: bearing,
           ),
         ),
       );
@@ -978,6 +1025,16 @@ class MapSampleState extends State<MapSample> {
       },
       onArrivalDetected: () {
         _handleArrival();
+        controller.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: _currentPosition!,
+              zoom: 19,
+              tilt: 0,
+              bearing: 0,
+            ),
+          ),
+        );
       },
       context: context,
     );
@@ -1186,6 +1243,16 @@ class MapSampleState extends State<MapSample> {
                     (routeCoordinates) {
                       if (routeCoordinates.isEmpty) {
                         _showArrivalDialog();
+                        controller.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target: _currentPosition!,
+                              zoom: 19,
+                              tilt: 0,
+                              bearing: 0,
+                            ),
+                          ),
+                        );
                         stopUpdatingRoute();
                       } else {
                         setState(() {
@@ -1213,9 +1280,9 @@ class MapSampleState extends State<MapSample> {
                     CameraUpdate.newCameraPosition(
                       CameraPosition(
                         target: _currentPosition!,
-                        zoom: 20, // ระดับการซูม
-                        tilt: 60, // ความเอียงของมุมกล้อง
-                        bearing: bearing, // หมุนแผนที่ตามเส้นทาง
+                        zoom: 20,
+                        tilt: 60,
+                        bearing: bearing,
                       ),
                     ),
                   );
@@ -1250,10 +1317,9 @@ class MapSampleState extends State<MapSample> {
     final double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
     final double bearing = atan2(y, x) * 180 / pi;
 
-    return (bearing + 360) % 360; // ให้ค่าอยู่ในช่วง 0-360 องศา
+    return (bearing + 360) % 360;
   }
 
-  // Update เส้นทางหมวดรถที่Call Api มาจาก MapBox Direction Api เรียกทุกๆ2วินาทีและอัพเดทเมื่อ currentPosition เปลี่ยนพิกัด
   Future<void> startUpdatingRoute(
       double startLat,
       double startLng,
@@ -1272,35 +1338,33 @@ class MapSampleState extends State<MapSample> {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: _currentPosition!,
-            zoom: 20, // ระดับการซูม
-            tilt: 60, // ความเอียงของมุมกล้อง
-            bearing: bearing, // หมุนแผนที่ตามเส้นทาง
+            zoom: 20,
+            tilt: 60,
+            bearing: bearing,
           ),
         ),
       );
       try {
         if (_currentPosition == null) return;
 
-        bool hasLocationChanged = _lastPosition == null ||
-            (calculateDistance(
-                    _lastPosition!.latitude,
-                    _lastPosition!.longitude,
-                    _currentPosition!.latitude,
-                    _currentPosition!.longitude) >
-                5);
+        // bool hasLocationChanged = _lastPosition == null ||
+        //     (calculateDistance(
+        //             _lastPosition!.latitude,
+        //             _lastPosition!.longitude,
+        //             _currentPosition!.latitude,
+        //             _currentPosition!.longitude) >
+        //         1);
 
-        if (hasLocationChanged) {
-          final routeCoordinates = await _service.getDirections(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-            endLat,
-            endLng,
-          );
+        final routeCoordinates = await _service.getDirections(
+          _currentPosition!.latitude,
+          _currentPosition!.longitude,
+          endLat,
+          endLng,
+        );
 
-          _lastPosition = _currentPosition;
-
-          onUpdate(routeCoordinates);
-        }
+        _lastPosition = _currentPosition;
+        print('call APi');
+        await onUpdate(routeCoordinates);
       } catch (e) {
         print('Error updating route: $e');
       }
@@ -1343,6 +1407,7 @@ class MapSampleState extends State<MapSample> {
                 setState(() {
                   _polylines.clear();
                   _polylineCoordinates.clear();
+
                   _steps.clear();
                 });
               },
