@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:maps/OpenChat/Main.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String phoneNumber;
@@ -77,10 +76,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('สมัครสมาชิกเรียบร้อย')),
       );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => WelcomeScreen()),
-      );
+      Navigator.pop(context);
+      Navigator.pop(context);
     } catch (e) {
       _showErrorDialog(context, 'Failed to save user data. Please try again.');
     } finally {

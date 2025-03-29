@@ -19,7 +19,6 @@ import 'package:sliding_up_panel/sliding_up_panel.dart';
 import '../MapboxDirectionService.dart';
 import '../OpenChat/ChatScreen.dart';
 import '../OpenChat/sharepreferenceservice.dart';
-import '../service/CarDirectionService.dart';
 
 class MapSample extends StatefulWidget {
   const MapSample({Key? key}) : super(key: key);
@@ -53,7 +52,7 @@ class MapSampleState extends State<MapSample> {
   LatLng? _destinationLatLng;
   Set<Polyline> _polylines = {};
   bool _isLoadingRoute = false;
-  RouteTrackingService? _routeTrackingService;
+  // RouteTrackingService? _routeTrackingService;
   List<LatLng> _currentRoute = [];
   List<LatLng> _routeCoordinates = [];
   bool _cameraMoved = false;
@@ -1185,35 +1184,6 @@ class MapSampleState extends State<MapSample> {
     }, onError: (error) {
       print("เกิดข้อผิดพลาดใน Position Stream: $error");
     });
-  }
-
-  // _updatePolyline();
-  Future<void> updateRoute() async {
-    if (_currentPosition == null || _endLocation == null) return;
-
-    try {
-      List<LatLng> newRoute = await Cardirectionservice.getRoute(
-          _currentPosition!, _endLocation!, 'Destination');
-
-      if (newRoute.isNotEmpty) {
-        if (_polylines.isEmpty || _polylines.first.points != newRoute) {
-          setState(() {
-            _polylines = {
-              Polyline(
-                polylineId: PolylineId('route'),
-                points: newRoute,
-                color: Colors.blue,
-                width: 5,
-                geodesic:
-                    true, // เพิ่มบรรทัดนี้หากต้องการให้เส้นทางมีลักษณะโค้ง
-              )
-            };
-          });
-        }
-      }
-    } catch (e) {
-      print('Error updating route: $e');
-    }
   }
 
 // อัพเดท Polyline แต่ไม่มั่นใจว่าฟังชันนี้ต้องใช้มั้ย (ยังไม่ลบออกและเทส)
