@@ -596,7 +596,7 @@ class MapSampleState extends State<MapSample> {
                             ),
                           ),
                         SizedBox(
-                          width: 30,
+                          width: 15,
                         ),
                         Obx(
                           () => Text(
