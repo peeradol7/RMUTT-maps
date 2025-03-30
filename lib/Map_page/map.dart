@@ -454,7 +454,8 @@ class MapSampleState extends State<MapSample> {
   Widget build(BuildContext context) {
     final carDistance = distanceController.carDistance.value;
     final walkDistance = distanceController.walkDistance.value;
-
+    final walkFormat = distanceController.formatDistance(walkDistance);
+    final carFormat = distanceController.formatDistance(carDistance);
     return Scaffold(
       appBar: AppBar(
         title: Container(
@@ -596,12 +597,19 @@ class MapSampleState extends State<MapSample> {
                         SizedBox(
                           width: 30,
                         ),
-                        Obx(
-                          () => Text(
-                            'ระยะทาง : ${action == ActionConstants.car ? distanceController.carDistance.value ?? '' : distanceController.walkDistance.value ?? ''}',
-                            style: TextStyle(fontSize: 15),
-                          ),
-                        ),
+                        action == ActionConstants.car
+                            ? Obx(
+                                () => Text(
+                                  'ระยะทาง : $carFormat',
+                                  style: TextStyle(fontSize: 15),
+                                ),
+                              )
+                            : Obx(
+                                () => Text(
+                                  'ระยะทาง : ${walkFormat}',
+                                  style: TextStyle(fontSize: 15),
+                                ),
+                              )
                       ],
                     ),
                     SizedBox(height: 8),
