@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:maps/OpenChat/sharepreferenceservice.dart';
+import 'package:maps/model/usermodel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String phoneNumber;
@@ -17,6 +20,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final prefs = SharedPreferencesService();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
   bool _isLoading = false;
@@ -65,6 +69,14 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           FirebaseFirestore.instance.collection('usersRMUTT');
       String userId = userCollection.doc().id;
 
+      final data = await UserModel(
+        userId: userId,
+        username: username,
+        name: name,
+        password: hashedPassword,
+        phoneNumber: phoneNumber,
+      );
+
       await userCollection.doc(userId).set({
         'userId': userId,
         'name': name,
@@ -72,16 +84,26 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         'phoneNumber': phoneNumber,
         'password': hashedPassword,
       });
+      await prefs.saveLoginData(data);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('สมัครสมาชิกเรียบร้อย')),
-      );
-      Navigator.pop(context);
-      Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('สมัครสมาชิกเรียบร้อย')),
+        );
+        Navigator.pop(context);
+        Navigator.pop(context);
+        Navigator.pop(context);
+        Navigator.pop(context);
+      }
     } catch (e) {
-      _showErrorDialog(context, 'Failed to save user data. Please try again.');
+      if (mounted) {
+        _showErrorDialog(
+            context, 'Failed to save user data. Please try again.');
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

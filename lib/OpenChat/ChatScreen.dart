@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:maps/Map_page/map.dart';
 import 'package:maps/OpenChat/Login.dart';
+import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/model/usermodel.dart';
 
 import 'PasswordResetDialog.dart';
@@ -21,6 +23,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ScrollController _scrollController = ScrollController();
+  final prefs = SharedPreferencesService();
   UserModel? _user;
   bool _isLoading = true;
 
@@ -28,6 +31,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _scrollToBottom();
   }
 
   String hashPassword(String password) {
@@ -38,12 +42,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _loadUserData() async {
     try {
-      SharedPreferencesService prefs =
-          await SharedPreferencesService.getInstance();
       UserModel? user = await prefs.getStoredUserData();
 
       setState(() {
-        _user = user!;
+        _user = user; // No need to use "!"
         _isLoading = false;
       });
     } catch (e) {
@@ -84,10 +86,17 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _logout() async {
-    SharedPreferencesService prefs =
-        await SharedPreferencesService.getInstance();
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
 
+  void _logout() async {
     await prefs.clearLoginData();
 
     if (context.mounted) {
@@ -121,8 +130,6 @@ class _ChatScreenState extends State<ChatScreen> {
           phoneNumber: _user!.phoneNumber,
         );
 
-        SharedPreferencesService prefs =
-            await SharedPreferencesService.getInstance();
         await prefs.saveLoginData(updatedUser);
 
         setState(() {
@@ -161,28 +168,34 @@ class _ChatScreenState extends State<ChatScreen> {
                 padding: EdgeInsets.zero,
                 children: [
                   DrawerHeader(
-                    decoration: BoxDecoration(
-                      color: Colors.teal,
-                    ),
+                    decoration: BoxDecoration(color: Colors.teal),
                     child: Text(
                       'เมนู',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 24),
                     ),
                   ),
                   ListTile(
                     leading: Icon(Icons.password),
                     title: Text('รีเซ็ทรหัสผ่าน'),
                     onTap: () {
-                      Navigator.pop(context); // Close drawer
+                      Navigator.pop(context);
                       showDialog(
                         context: context,
                         builder: (context) => PasswordResetDialog(
                           user: _user!,
                           onPasswordReset: _resetPassword,
                         ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.map),
+                    title: Text('ไปหน้าแผนที่'),
+                    onTap: () {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (context) => MapSample()),
+                        (Route<dynamic> route) => false,
                       );
                     },
                   ),
@@ -201,7 +214,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: _firestore
                   .collection('chat')
-                  .orderBy('timestamp')
+                  .orderBy('timestamp', descending: false)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -211,6 +224,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(child: Text('No messages yet'));
                 }
+
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _scrollToBottom();
+                });
 
                 return ListView(
                   controller: _scrollController,
@@ -296,7 +313,16 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ],
                   )
-                : SizedBox.shrink(), // ซ่อนแถบข้อความเมื่อไม่มี user
+                : TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => WelcomeScreen(),
+                        ),
+                      );
+                    },
+                    child: Text('กรุณาเข้าสู่ระบบเพื่อเข้าสู่บทสนทนา')),
           ),
         ],
       ),

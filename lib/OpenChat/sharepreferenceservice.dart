@@ -8,34 +8,49 @@ class SharedPreferencesService {
   static const String userData = 'userData';
 
   static const String userId = 'userid';
+  static final SharedPreferencesService _instance =
+      SharedPreferencesService._internal();
+  static SharedPreferences? _prefs;
 
-  final SharedPreferences _prefs;
-  SharedPreferencesService(this._prefs);
+  factory SharedPreferencesService() {
+    return _instance;
+  }
 
-  static Future<SharedPreferencesService> getInstance() async {
-    final prefs = await SharedPreferences.getInstance();
-    return SharedPreferencesService(prefs);
+  SharedPreferencesService._internal();
+
+  static Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+
+  Future<bool> setString(String key, String value) async {
+    return await _prefs!.setString(key, value);
+  }
+
+  String? getString(String key) {
+    return _prefs!.getString(key);
   }
 
   Future<String?> getStoredUid() async {
-    final uid = _prefs.getString(uidKey);
+    final uid = _prefs!.getString(uidKey);
     print('Retrieved UID from storage: $uid');
     return uid;
   }
 
   Future<void> saveLoginData(UserModel usermodel) async {
     try {
+      if (_prefs == null) {
+        _prefs = await SharedPreferences.getInstance(); // Ensure initialization
+      }
+
       final data = usermodel.toJson();
       print(
           '6. In saveLoginData before encode - password: ${data['password']}');
 
       final encoded = json.encode(data);
-      print('7. In saveLoginData after encode: $encoded');
+      print(encoded);
 
-      await _prefs.setString(userData, encoded);
-      print('8. After saving to SharedPreferences');
-
-      await _prefs.setString(uidKey, usermodel.userId);
+      await _prefs!.setString(userData, encoded);
+      await _prefs!.setString(uidKey, usermodel.userId);
     } catch (e) {
       print('Error in saveLoginData: $e');
     }
@@ -43,11 +58,15 @@ class SharedPreferencesService {
 
   Future<UserModel?> getStoredUserData() async {
     try {
-      final userDataString = _prefs?.getString('userData');
+      final userDataString = _prefs?.getString(userData);
       if (userDataString != null && userDataString.isNotEmpty) {
+        print('User data string from SharedPreferences: $userDataString');
         final decoded = json.decode(userDataString);
         print('Decoded user data: $decoded');
+
         return UserModel.fromJson(decoded);
+      } else {
+        print('No user data found in SharedPreferences.');
       }
     } catch (e) {
       print('Error getting stored user data: $e');
@@ -56,16 +75,6 @@ class SharedPreferencesService {
   }
 
   Future<void> clearLoginData() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    bool userDataRemoved = await prefs.remove('userData');
-    bool userIdRemoved = await prefs.remove('userId');
-
-    print('User Data Removed: $userDataRemoved');
-    print('User ID Removed: $userIdRemoved');
-
-    if (!userDataRemoved || !userIdRemoved) {
-      print('Warning: Some keys were not found in SharedPreferences.');
-    }
+    _prefs!.clear();
   }
 }

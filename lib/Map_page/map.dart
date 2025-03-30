@@ -100,21 +100,17 @@ class MapSampleState extends State<MapSample> {
   LatLng? _lastCameraPosition;
   final double thresholdDistance = 100.0;
   String? action;
-
+  bool? isZoom;
+  LatLng? lastDesination;
   @override
   void initState() {
     super.initState();
     _panelController = PanelController();
     _initializeIcons();
-    _initPreferences();
     _checkInitialPermissionStatus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestLocationPermission();
     });
-  }
-
-  Future<void> _initPreferences() async {
-    _pref = await SharedPreferencesService.getInstance();
   }
 
   BitmapDescriptor getIconForType(String locationType) {
@@ -432,7 +428,7 @@ class MapSampleState extends State<MapSample> {
   //       print('No valid UID found');
   //     }
 
-  //     if (!context.mounted) {
+  //     if (!context.mounted) {_requestLocationPermission
   //       print('Context not mounted');
   //       return;
   //     }
@@ -494,7 +490,8 @@ class MapSampleState extends State<MapSample> {
           IconButton(
             icon: Icon(Icons.gps_fixed),
             onPressed: () {
-              if (_hasGPSPermission == false) {
+              // _requestLocationPermission();
+              if (_hasGPSPermission == true) {
                 return;
               }
               zoom(_currentPosition!);
@@ -562,7 +559,7 @@ class MapSampleState extends State<MapSample> {
                   children: [
                     Row(
                       children: [
-                        if (_showGpsButton)
+                        if (_showGpsButton == true)
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
@@ -577,39 +574,40 @@ class MapSampleState extends State<MapSample> {
                             ),
                             child: IconButton(
                               onPressed: () async {
-                                GoogleMapController controller =
+                                final GoogleMapController controller =
                                     await _controller.future;
-                                controller.animateCamera(
-                                  CameraUpdate.newCameraPosition(
-                                    CameraPosition(
-                                      target: _currentPosition!,
-                                      zoom: 16,
-                                    ),
-                                  ),
-                                );
                                 setState(() {
                                   _showGpsButton = false;
+                                  isZoom = true;
+                                  double bearing = _isBearingActive
+                                      ? calculateBearing(
+                                          _currentPosition!, lastDesination!)
+                                      : 0;
+                                  controller.animateCamera(
+                                    CameraUpdate.newCameraPosition(
+                                      CameraPosition(
+                                        target: _currentPosition!,
+                                        zoom: 20,
+                                        tilt: 60,
+                                        bearing: bearing,
+                                      ),
+                                    ),
+                                  );
                                 });
                               },
-                              icon: Icon(Icons.gps_fixed, color: Colors.black),
+                              icon: Icon(Icons.arrow_drop_up,
+                                  color: Colors.black),
                             ),
                           ),
                         SizedBox(
                           width: 30,
                         ),
-                        action == ActionConstants.car
-                            ? Obx(
-                                () => Text(
-                                  'ระยะทาง : $carFormat',
-                                  style: TextStyle(fontSize: 15),
-                                ),
-                              )
-                            : Obx(
-                                () => Text(
-                                  'ระยะทาง : ${walkFormat}',
-                                  style: TextStyle(fontSize: 15),
-                                ),
-                              )
+                        Obx(
+                          () => Text(
+                            'ระยะทาง : ${action == ActionConstants.car ? distanceController.carFormat : distanceController.walkFormat}',
+                            style: TextStyle(fontSize: 15),
+                          ),
+                        )
                       ],
                     ),
                     SizedBox(height: 8),
@@ -933,9 +931,10 @@ class MapSampleState extends State<MapSample> {
     );
 
     print("📏 Distance from current position: $distance meters");
-
     setState(() {
-      _showGpsButton = distance > 1;
+      if (distance > 1) {
+        _showGpsButton = false;
+      }
       print("🚀 _showGpsButton: $_showGpsButton");
     });
   }
@@ -960,11 +959,11 @@ class MapSampleState extends State<MapSample> {
       position.target.longitude,
     );
 
-    if (distance > 1) {
+    if (distance > 0.14) {
       setState(() {
         _lastCameraPosition = position.target;
         _showGpsButton = true;
-        _isRouteActive = false;
+        isZoom = false;
       });
 
       print("🚀 _showGpsButton: $_showGpsButton (คำนวณครั้งสุดท้าย)");
@@ -1126,6 +1125,7 @@ class MapSampleState extends State<MapSample> {
   // Fetch เส้นทางจาก API โหมดเดิน
   void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
       String destination) async {
+    isZoom = true;
     final GoogleMapController controller = await _controller.future;
 
     if (_isLoadingRoute || !_isRouteActive) return;
@@ -1134,8 +1134,8 @@ class MapSampleState extends State<MapSample> {
     setState(() {
       _isLoadingRoute = true;
     });
-
-    if (_isRouteActive) {
+    lastDesination = destinationLatLng;
+    if (isZoom == true) {
       double bearing = _isBearingActive
           ? calculateBearing(_currentPosition!, destinationLatLng)
           : 0;
@@ -1272,7 +1272,6 @@ class MapSampleState extends State<MapSample> {
     _routeUpdateTimer?.cancel();
     _routeUpdateTimer = Timer.periodic(Duration(seconds: 2), (timer) {
       if (_currentPosition != null && _savedDestination != null) {
-        action = 'walk';
         _fetchRouteFromApiOnce(
             _currentPosition!, _savedDestination!, _savedDestinationName ?? '');
       }
@@ -1343,6 +1342,7 @@ class MapSampleState extends State<MapSample> {
               onPressed: () async {
                 Navigator.of(context).pop();
                 if (_currentPosition != null) {
+                  isZoom = true;
                   _savedDestination = endLocation;
                   _savedDestinationName = destination;
                   _isRouteActive = true;
@@ -1394,6 +1394,7 @@ class MapSampleState extends State<MapSample> {
             ),
             TextButton(
               onPressed: () async {
+                action = ActionConstants.walk;
                 Navigator.of(context).pop();
                 if (_currentPosition != null) {
                   _savedDestination = endLocation;
@@ -1456,23 +1457,25 @@ class MapSampleState extends State<MapSample> {
     LatLng? _lastPosition;
     _isRouteActive = true;
     LatLng endLocation = LatLng(endLat, endLng);
+    lastDesination = endLocation;
     _timer?.cancel();
     _timer = Timer.periodic(Duration(seconds: 2), (timer) async {
       final GoogleMapController controller = await _controller.future;
 
       action = 'car';
-
-      double bearing = calculateBearing(_currentPosition!, endLocation);
-      controller.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: _currentPosition!,
-            zoom: 20,
-            tilt: 60,
-            bearing: bearing,
+      if (isZoom == true) {
+        double bearing = calculateBearing(_currentPosition!, endLocation);
+        controller.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: _currentPosition!,
+              tilt: 60,
+              zoom: 20,
+              bearing: bearing,
+            ),
           ),
-        ),
-      );
+        );
+      }
       try {
         if (_currentPosition == null) return;
 

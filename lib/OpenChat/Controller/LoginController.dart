@@ -9,7 +9,7 @@ import '../sharepreferenceservice.dart';
 
 class LoginController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
+  final pref = SharedPreferencesService();
   String hashPassword(String password) {
     final bytes = utf8.encode(password);
     final hash = sha256.convert(bytes);
@@ -50,9 +50,7 @@ class LoginController {
                 : '',
           );
 
-          SharedPreferencesService prefs =
-              await SharedPreferencesService.getInstance();
-          await prefs.saveLoginData(user);
+          await pref.saveLoginData(user);
 
           return user;
         } else {

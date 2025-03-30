@@ -12,4 +12,12 @@ class DistanceController extends GetxController {
       return 'ระยะทาง : ${distanceInKm.toStringAsFixed(2)} กิโล';
     }
   }
+
+  String get carFormat => carDistance.value < 1000
+      ? '${carDistance.value.toStringAsFixed(0)} เมตร'
+      : '${(carDistance.value / 1000).toStringAsFixed(2)} กิโล';
+
+  String get walkFormat => walkDistance.value < 1000
+      ? '${walkDistance.value.toStringAsFixed(0)} เมตร'
+      : '${(walkDistance.value / 1000).toStringAsFixed(2)} กิโล';
 }
