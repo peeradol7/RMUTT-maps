@@ -47,10 +47,10 @@ class SharedPreferencesService {
           '6. In saveLoginData before encode - password: ${data['password']}');
 
       final encoded = json.encode(data);
-      print(encoded);
 
       await _prefs!.setString(userData, encoded);
       await _prefs!.setString(uidKey, usermodel.userId);
+      print('DATA *** $encoded');
     } catch (e) {
       print('Error in saveLoginData: $e');
     }

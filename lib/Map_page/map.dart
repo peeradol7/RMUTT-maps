@@ -489,13 +489,9 @@ class MapSampleState extends State<MapSample> {
             ),
           IconButton(
             icon: Icon(Icons.gps_fixed),
-            onPressed: () {
-              // _requestLocationPermission();
-              if (_hasGPSPermission == true) {
-                return;
-              }
+            onPressed: () async {
+              await _requestLocationPermission();
               zoom(_currentPosition!);
-              _requestLocationPermission();
             },
           ),
         ],

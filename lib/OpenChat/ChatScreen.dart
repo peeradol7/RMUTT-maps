@@ -43,9 +43,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _loadUserData() async {
     try {
       UserModel? user = await prefs.getStoredUserData();
-
+      print('loading data $user');
       setState(() {
-        _user = user; // No need to use "!"
+        _user = user;
         _isLoading = false;
       });
     } catch (e) {
