@@ -6,8 +6,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:get/get.dart';
+import 'package:get/get_core/src/get_main.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:maps/MarkerController.dart';
+import 'package:maps/OpenChat/Controller/distance_controller.dart';
 import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
@@ -16,9 +19,10 @@ import 'package:permission_handler/permission_handler.dart'
     show openAppSettings;
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
-import '../MapboxDirectionService.dart';
+import '../service/MapboxDirectionService.dart';
 import '../OpenChat/ChatScreen.dart';
 import '../OpenChat/sharepreferenceservice.dart';
+import 'action_constants.dart';
 
 class MapSample extends StatefulWidget {
   const MapSample({Key? key}) : super(key: key);
@@ -81,7 +85,7 @@ class MapSampleState extends State<MapSample> {
   bool _isBearingActive = true;
   LatLng? _endLocation;
   final QuestionnaireDialogHelper questionnaire = QuestionnaireDialogHelper();
-
+  final DistanceController distanceController = Get.put(DistanceController());
   late GoogleMapController mapController;
   MapboxDirectionService _service = MapboxDirectionService();
   final MarkerController _markerController = MarkerController();
@@ -92,6 +96,10 @@ class MapSampleState extends State<MapSample> {
   StreamSubscription<Position>? _locationSubscription;
   List<LatLng> _currentPolylinePoints = [];
   late SharedPreferencesService _pref;
+  bool _showGpsButton = false;
+  LatLng? _lastCameraPosition;
+  final double thresholdDistance = 100.0;
+  String? action;
 
   @override
   void initState() {
@@ -366,44 +374,6 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-//เซ็ท Icon ของ Marker id ต่า่งๆ
-  // Future<void> _setMarkerIcon() async {
-  //   final Uint8List markerIcon =
-  //       await getBytesFromAsset('assets/Userlocation.png', 125);
-  //   _markerIcon = BitmapDescriptor.fromBytes(markerIcon);
-
-  //   final Uint8List toiletIcon =
-  //       await getBytesFromAsset('assets/iconCategory/toilet1.png', 125);
-  //   _toilet = BitmapDescriptor.fromBytes(toiletIcon);
-
-  //   final Uint8List parkingIcon =
-  //       await getBytesFromAsset('assets/iconCategory/parking.png', 110);
-  //   _parkingIcon = BitmapDescriptor.fromBytes(parkingIcon);
-
-  //   final Uint8List foodIcon =
-  //       await getBytesFromAsset('assets/iconCategory/foodDrink.png', 125);
-  //   _foodIcon = BitmapDescriptor.fromBytes(foodIcon);
-
-  //   final Uint8List classroomIcon =
-  //       await getBytesFromAsset('assets/iconCategory/classroom.png', 100);
-  //   _classroomIcon = BitmapDescriptor.fromBytes(classroomIcon);
-
-  //   final Uint8List serviceIcon =
-  //       await getBytesFromAsset('assets/iconCategory/Service.png', 150);
-  //   _serviceIcon = BitmapDescriptor.fromBytes(serviceIcon);
-
-  //   final Uint8List libraryIcon =
-  //       await getBytesFromAsset('assets/iconCategory/Libra.png', 125);
-  //   _libraryIcon = BitmapDescriptor.fromBytes(libraryIcon);
-  //   final Uint8List canteenIcon =
-  //       await getBytesFromAsset('assets/iconCategory/canteen.png', 125);
-  //   _canteenIcon = BitmapDescriptor.fromBytes(canteenIcon);
-
-  //   final Uint8List sportIcon =
-  //       await getBytesFromAsset('assets/iconCategory/sport.png', 125);
-  //   _sportIcon = BitmapDescriptor.fromBytes(sportIcon);
-  // }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -435,53 +405,56 @@ class MapSampleState extends State<MapSample> {
   }
 
 //ฟังชันสำหรับ เข้าระบบ Community ถ้าข้อมูลไม่อยู่ใน Key ของ getStoredUserData ก็จะไปหน้าของ WelcomeScreen
-  Future<void> handleChat(BuildContext context) async {
-    try {
-      final storedUid = await _pref.getStoredUid();
+  // Future<void> handleChat(BuildContext context) async {
+  //   try {
+  //     final storedUid = await _pref.getStoredUid();
 
-      if (storedUid != null && storedUid.isNotEmpty) {
-        final userData = await _pref.getStoredUserData();
+  //     if (storedUid != null && storedUid.isNotEmpty) {
+  //       final userData = await _pref.getStoredUserData();
 
-        if (!context.mounted) {
-          print('Context not mounted');
-          return;
-        }
+  //       if (!context.mounted) {
+  //         print('Context not mounted');
+  //         return;
+  //       }
 
-        if (userData != null && userData.isNotEmpty) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(),
-            ),
-          );
-          return;
-        } else {
-          print('User data is empty');
-        }
-      } else {
-        print('No valid UID found');
-      }
+  //       if (userData != null && userData.isNotEmpty) {
+  //         Navigator.push(
+  //           context,
+  //           MaterialPageRoute(
+  //             builder: (context) => ChatScreen(),
+  //           ),
+  //         );
+  //         return;
+  //       } else {
+  //         print('User data is empty');
+  //       }
+  //     } else {
+  //       print('No valid UID found');
+  //     }
 
-      if (!context.mounted) {
-        print('Context not mounted');
-        return;
-      }
+  //     if (!context.mounted) {
+  //       print('Context not mounted');
+  //       return;
+  //     }
 
-      print('Navigating to LoginScreen');
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => WelcomeScreen(),
-        ),
-      );
-    } catch (e) {
-      print('Error in login process: $e');
-      print('Stack trace: ${StackTrace.current}');
-    }
-  }
+  //     print('Navigating to LoginScreen');
+  //     Navigator.push(
+  //       context,
+  //       MaterialPageRoute(
+  //         builder: (context) => WelcomeScreen(),
+  //       ),
+  //     );
+  //   } catch (e) {
+  //     print('Error in login process: $e');
+  //     print('Stack trace: ${StackTrace.current}');
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
+    final carDistance = distanceController.carDistance.value;
+    final walkDistance = distanceController.walkDistance.value;
+
     return Scaffold(
       appBar: AppBar(
         title: Container(
@@ -517,34 +490,16 @@ class MapSampleState extends State<MapSample> {
                 });
               },
             ),
-          Container(
-            child: _hasGPSPermission
-                ? Container()
-                : GestureDetector(
-                    onTap: () => _requestLocationPermission(),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.blue,
-                      ),
-                      padding: EdgeInsets.all(10),
-                      child: IconButton(
-                        color: Colors.white,
-                        onPressed: () {
-                          _requestLocationPermission();
-                        },
-                        icon: Icon(Icons.gps_fixed),
-                      ),
-                    ),
-                  ),
+          IconButton(
+            icon: Icon(Icons.gps_fixed),
+            onPressed: () {
+              if (_hasGPSPermission == false) {
+                return;
+              }
+              zoom(_currentPosition!);
+              _requestLocationPermission();
+            },
           ),
-          // IconButton(
-          //   icon: Icon(Icons.gps_fixed),
-          //   onPressed: () {
-          //     zoom(_currentPosition!);
-          //     _requestLocationPermission(context);
-          //   },
-          // ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -558,7 +513,11 @@ class MapSampleState extends State<MapSample> {
             IconButton(
               icon: Icon(Icons.comment),
               onPressed: () {
-                handleChat(context);
+                // handleChat(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ChatScreen()),
+                );
               },
             ),
             IconButton(
@@ -573,7 +532,7 @@ class MapSampleState extends State<MapSample> {
       body: Stack(
         children: [
           GoogleMap(
-            myLocationButtonEnabled: true,
+            myLocationButtonEnabled: false,
             mapType: MapType.satellite,
             myLocationEnabled: true,
             markers: Set<Marker>.from(_markerController.markers)..addAll([]),
@@ -583,69 +542,112 @@ class MapSampleState extends State<MapSample> {
             trafficEnabled: true,
             mapToolbarEnabled: false,
             zoomControlsEnabled: false,
+            onCameraMove: _onCameraMove,
+            onCameraIdle: _onCameraIdle,
             onMapCreated: (GoogleMapController controller) {
               _controller.complete(controller);
             },
           ),
 
-          Positioned(
-            left: 4.0,
-            bottom: 8.0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-            ),
-          ),
           if (_polylines.isNotEmpty)
-            Positioned(
-              bottom: 3.0,
-              left: 175,
-              right: 0,
-              child: Center(
-                child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _polylines.clear();
-                      _showCancelButton = false;
-                      _markers.clear();
-                      _showPanel = false;
-                      _cancelRoute();
-                      _routeUpdateTimer?.cancel();
-                      _routeUpdateTimer = null;
-                      _timer?.cancel();
-                      _isLoadingRoute = false;
-                      _steps.clear();
-                      _isBearingActive = !_isBearingActive;
-                      _controller.future.then((controller) {
-                        controller.animateCamera(
-                          CameraUpdate.newCameraPosition(
-                            CameraPosition(
-                              target: _currentPosition!,
-                              zoom: 19,
-                              tilt: 0,
-                              bearing: 0,
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: Colors.white.withOpacity(0.9),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        if (_showGpsButton)
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4,
+                                  offset: Offset(2, 2),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              onPressed: () async {
+                                GoogleMapController controller =
+                                    await _controller.future;
+                                controller.animateCamera(
+                                  CameraUpdate.newCameraPosition(
+                                    CameraPosition(
+                                      target: _currentPosition!,
+                                      zoom: 16,
+                                    ),
+                                  ),
+                                );
+                                setState(() {
+                                  _showGpsButton = false;
+                                });
+                              },
+                              icon: Icon(Icons.gps_fixed, color: Colors.black),
                             ),
                           ),
-                        );
-                      });
-                    });
-                  },
-                  child: Text(
-                    'ยกเลิกการแสดงเส้นทาง',
-                    style: TextStyle(fontSize: 13.5),
-                  ),
+                        SizedBox(
+                          width: 30,
+                        ),
+                        Obx(
+                          () => Text(
+                            'ระยะทาง : ${action == ActionConstants.car ? distanceController.carDistance.value ?? '' : distanceController.walkDistance.value ?? ''}',
+                            style: TextStyle(fontSize: 15),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _polylines.clear();
+                          _showCancelButton = false;
+                          _markers.clear();
+                          _showPanel = false;
+                          _cancelRoute();
+                          _routeUpdateTimer?.cancel();
+                          _routeUpdateTimer = null;
+                          _timer?.cancel();
+                          _isLoadingRoute = false;
+                          _steps.clear();
+                          _isBearingActive = !_isBearingActive;
+                          _controller.future.then((controller) {
+                            controller.animateCamera(
+                              CameraUpdate.newCameraPosition(
+                                CameraPosition(
+                                  target: _currentPosition!,
+                                  zoom: 19,
+                                  tilt: 0,
+                                  bearing: 0,
+                                ),
+                              ),
+                            );
+                          });
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        backgroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        'ยกเลิกการแสดงเส้นทาง',
+                        style: TextStyle(fontSize: 14, color: Colors.black),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+
           if (_markerController.markers.isNotEmpty &&
               !(_markerController.markers.length == 1 &&
                   _markerController.markers.first.markerId.value ==
@@ -907,6 +909,60 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+  void _onCameraIdle() async {
+    print("🔹 Camera stopped moving at: $_lastCameraPosition");
+
+    if (_currentPosition == null || _lastCameraPosition == null) {
+      print("⚠️ _currentPosition หรือ _lastCameraPosition เป็น null");
+      return;
+    }
+
+    double distance = calculateDistance(
+      _currentPosition!.latitude,
+      _currentPosition!.longitude,
+      _lastCameraPosition!.latitude,
+      _lastCameraPosition!.longitude,
+    );
+
+    print("📏 Distance from current position: $distance meters");
+
+    setState(() {
+      _showGpsButton = distance > 1;
+      print("🚀 _showGpsButton: $_showGpsButton");
+    });
+  }
+
+  void _onCameraMove(CameraPosition position) {
+    print("📍 Camera moving to: ${position.target}");
+
+    if (_currentPosition == null) {
+      print("⚠️ _currentPosition เป็น null");
+      return;
+    }
+
+    if (_showGpsButton) {
+      print("🛑 หยุดคำนวณเพราะ _showGpsButton เป็น true");
+      return;
+    }
+
+    double distance = calculateDistance(
+      _currentPosition!.latitude,
+      _currentPosition!.longitude,
+      position.target.latitude,
+      position.target.longitude,
+    );
+
+    if (distance > 1) {
+      setState(() {
+        _lastCameraPosition = position.target;
+        _showGpsButton = true;
+        _isRouteActive = false;
+      });
+
+      print("🚀 _showGpsButton: $_showGpsButton (คำนวณครั้งสุดท้าย)");
+    }
+  }
+
   Future<void> _checkInitialPermissionStatus() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -1058,6 +1114,7 @@ class MapSampleState extends State<MapSample> {
     );
   }
 
+  void resetDistance() {}
   // Fetch เส้นทางจาก API โหมดเดิน
   void _fetchRouteFromApiOnce(LatLng currentPosition, LatLng destinationLatLng,
       String destination) async {
@@ -1175,6 +1232,7 @@ class MapSampleState extends State<MapSample> {
     ).listen((Position position) async {
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
+        _lastCameraPosition = _currentPosition;
       });
 
       if (!_cameraMoved) {
@@ -1206,6 +1264,7 @@ class MapSampleState extends State<MapSample> {
     _routeUpdateTimer?.cancel();
     _routeUpdateTimer = Timer.periodic(Duration(seconds: 2), (timer) {
       if (_currentPosition != null && _savedDestination != null) {
+        action = 'walk';
         _fetchRouteFromApiOnce(
             _currentPosition!, _savedDestination!, _savedDestinationName ?? '');
       }
@@ -1393,6 +1452,8 @@ class MapSampleState extends State<MapSample> {
     _timer = Timer.periodic(Duration(seconds: 2), (timer) async {
       final GoogleMapController controller = await _controller.future;
 
+      action = 'car';
+
       double bearing = calculateBearing(_currentPosition!, endLocation);
       controller.animateCamera(
         CameraUpdate.newCameraPosition(
@@ -1406,14 +1467,6 @@ class MapSampleState extends State<MapSample> {
       );
       try {
         if (_currentPosition == null) return;
-
-        // bool hasLocationChanged = _lastPosition == null ||
-        //     (calculateDistance(
-        //             _lastPosition!.latitude,
-        //             _lastPosition!.longitude,
-        //             _currentPosition!.latitude,
-        //             _currentPosition!.longitude) >
-        //         1);
 
         final routeCoordinates = await _service.getDirections(
           _currentPosition!.latitude,

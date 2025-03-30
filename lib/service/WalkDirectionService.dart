@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert'; // สำหรับแปลง JSON
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:get/get_state_manager/get_state_manager.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:maps/OpenChat/Controller/distance_controller.dart';
 
 class Walkdirectionservice {
   final Function(List<LatLng>, List<Map<String, dynamic>>) onRouteFetched;
@@ -15,6 +18,8 @@ class Walkdirectionservice {
     required this.onArrivalDetected,
     required this.context, // รับค่า context
   });
+
+  final DistanceController controller = Get.put(DistanceController());
 
   Future<void> fetchAndCalculateRoutes(LatLng start, LatLng end) async {
     print('Start point: ${start.latitude}, ${start.longitude}');
@@ -40,6 +45,7 @@ class Walkdirectionservice {
         final totalDistance = data['total_distance'] as double;
         print('Received path points: ${path.length}');
         print('Total distance: $totalDistance');
+        controller.walkDistance.value = totalDistance;
 
         List<LatLng> polylineCoordinates = path.map((point) {
           return LatLng(point[1], point[0]);

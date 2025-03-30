@@ -1,9 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'package:maps/OpenChat/Controller/distance_controller.dart';
 
-class MapboxDirectionService {
+class MapboxDirectionService extends GetxController {
+  final DistanceController controller = Get.put(DistanceController());
+
   static const String token =
       'pk.eyJ1IjoicGVlcmFkb2w3NSIsImEiOiJjbTU2N3VtaXoyd3RvMmxzZWZsOTU2a283In0.1H_sKPytOL72AJeNz4U99g';
 
@@ -21,9 +25,8 @@ class MapboxDirectionService {
       if (data['routes'] != null && (data['routes'] as List).isNotEmpty) {
         final route = data['routes'][0];
         final distance = route['distance'] ?? 0.0;
-
         print('Total Distance: $distance meters');
-
+        controller.carDistance.value = distance;
         if (distance <= 30) {
           print('ถึงปลายทางแล้ว');
           return [];
