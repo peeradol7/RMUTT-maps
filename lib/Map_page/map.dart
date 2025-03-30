@@ -660,7 +660,7 @@ class MapSampleState extends State<MapSample> {
                       'currentLocation') &&
               _polylines.isEmpty)
             Positioned(
-              top: 60,
+              top: 5,
               right: 10.0,
               child: SizedBox(
                 width: 100.0,
