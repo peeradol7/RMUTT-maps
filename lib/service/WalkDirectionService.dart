@@ -3,7 +3,6 @@ import 'dart:convert'; // สำหรับแปลง JSON
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:get/get_state_manager/get_state_manager.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:maps/OpenChat/Controller/distance_controller.dart';
@@ -43,10 +42,9 @@ class Walkdirectionservice {
         final data = json.decode(response.body);
         final path = data['path'] as List;
         final totalDistance = data['total_distance'] as double;
-        print('Received path points: ${path.length}');
-        print('Total distance: $totalDistance');
-        controller.walkDistance.value = totalDistance;
 
+        controller.walkDistance.value = totalDistance;
+        print('walk distance Value ** ${controller.walkDistance.value}');
         List<LatLng> polylineCoordinates = path.map((point) {
           return LatLng(point[1], point[0]);
         }).toList();

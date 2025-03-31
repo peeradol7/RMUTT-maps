@@ -17,7 +17,7 @@ class DistanceController extends GetxController {
       ? '${carDistance.value.toStringAsFixed(0)} เมตร'
       : '${(carDistance.value / 1000).toStringAsFixed(2)} กิโล';
 
-  String get walkFormat => walkDistance.value < 1000
-      ? '${walkDistance.value.toStringAsFixed(0)} เมตร'
-      : '${(walkDistance.value / 1000).toStringAsFixed(2)} กิโล';
+  String get walkFormat => walkDistance.value < 1
+      ? '${(walkDistance.value * 1000).toStringAsFixed(0)} เมตร'
+      : '${walkDistance.value.toStringAsFixed(2)} กิโล';
 }

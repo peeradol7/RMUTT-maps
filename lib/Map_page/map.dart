@@ -7,11 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:maps/MarkerController.dart';
 import 'package:maps/OpenChat/Controller/distance_controller.dart';
-import 'package:maps/OpenChat/Main.dart';
 import 'package:maps/Survey.dart';
 import 'package:maps/locationontap.dart';
 import 'package:maps/service/WalkDirectionService.dart';
@@ -19,9 +17,9 @@ import 'package:permission_handler/permission_handler.dart'
     show openAppSettings;
 import 'package:sliding_up_panel/sliding_up_panel.dart';
 
-import '../service/MapboxDirectionService.dart';
 import '../OpenChat/ChatScreen.dart';
 import '../OpenChat/sharepreferenceservice.dart';
+import '../service/MapboxDirectionService.dart';
 import 'action_constants.dart';
 
 class MapSample extends StatefulWidget {
@@ -400,58 +398,8 @@ class MapSampleState extends State<MapSample> {
     }
   }
 
-//ฟังชันสำหรับ เข้าระบบ Community ถ้าข้อมูลไม่อยู่ใน Key ของ getStoredUserData ก็จะไปหน้าของ WelcomeScreen
-  // Future<void> handleChat(BuildContext context) async {
-  //   try {
-  //     final storedUid = await _pref.getStoredUid();
-
-  //     if (storedUid != null && storedUid.isNotEmpty) {
-  //       final userData = await _pref.getStoredUserData();
-
-  //       if (!context.mounted) {
-  //         print('Context not mounted');
-  //         return;
-  //       }
-
-  //       if (userData != null && userData.isNotEmpty) {
-  //         Navigator.push(
-  //           context,
-  //           MaterialPageRoute(
-  //             builder: (context) => ChatScreen(),
-  //           ),
-  //         );
-  //         return;
-  //       } else {
-  //         print('User data is empty');
-  //       }
-  //     } else {
-  //       print('No valid UID found');
-  //     }
-
-  //     if (!context.mounted) {_requestLocationPermission
-  //       print('Context not mounted');
-  //       return;
-  //     }
-
-  //     print('Navigating to LoginScreen');
-  //     Navigator.push(
-  //       context,
-  //       MaterialPageRoute(
-  //         builder: (context) => WelcomeScreen(),
-  //       ),
-  //     );
-  //   } catch (e) {
-  //     print('Error in login process: $e');
-  //     print('Stack trace: ${StackTrace.current}');
-  //   }
-  // }
-
   @override
   Widget build(BuildContext context) {
-    final carDistance = distanceController.carDistance.value;
-    final walkDistance = distanceController.walkDistance.value;
-    final walkFormat = distanceController.formatDistance(walkDistance);
-    final carFormat = distanceController.formatDistance(carDistance);
     return Scaffold(
       appBar: AppBar(
         title: Container(
@@ -544,109 +492,111 @@ class MapSampleState extends State<MapSample> {
           ),
 
           if (_polylines.isNotEmpty)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: Colors.white.withOpacity(0.9),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        if (_showGpsButton == true)
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 4,
-                                  offset: Offset(2, 2),
-                                ),
-                              ],
-                            ),
-                            child: IconButton(
-                              onPressed: () async {
-                                final GoogleMapController controller =
-                                    await _controller.future;
-                                setState(() {
-                                  _showGpsButton = false;
-                                  isZoom = true;
-                                  double bearing = _isBearingActive
-                                      ? calculateBearing(
-                                          _currentPosition!, lastDesination!)
-                                      : 0;
-                                  controller.animateCamera(
-                                    CameraUpdate.newCameraPosition(
-                                      CameraPosition(
-                                        target: _currentPosition!,
-                                        zoom: 20,
-                                        tilt: 60,
-                                        bearing: bearing,
-                                      ),
-                                    ),
-                                  );
-                                });
-                              },
-                              icon: Icon(Icons.arrow_drop_up,
-                                  color: Colors.black),
-                            ),
-                          ),
-                        SizedBox(
-                          width: 15,
-                        ),
-                        Obx(
-                          () => Text(
-                            'ระยะทาง : ${action == ActionConstants.car ? distanceController.carFormat : distanceController.walkFormat}',
-                            style: TextStyle(fontSize: 15),
-                          ),
-                        )
-                      ],
-                    ),
-                    SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: () {
+            Positioned(
+              bottom: 0,
+              right: 1,
+              left: 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_showGpsButton == true)
+                    TextButton(
+                      onPressed: () async {
+                        final GoogleMapController controller =
+                            await _controller.future;
                         setState(() {
-                          _polylines.clear();
-                          _showCancelButton = false;
-                          _markers.clear();
-                          _showPanel = false;
-                          _cancelRoute();
-                          _routeUpdateTimer?.cancel();
-                          _routeUpdateTimer = null;
-                          _timer?.cancel();
-                          _isLoadingRoute = false;
-                          _steps.clear();
-                          _isBearingActive = !_isBearingActive;
-                          _controller.future.then((controller) {
-                            controller.animateCamera(
-                              CameraUpdate.newCameraPosition(
-                                CameraPosition(
-                                  target: _currentPosition!,
-                                  zoom: 19,
-                                  tilt: 0,
-                                  bearing: 0,
-                                ),
+                          _showGpsButton = false;
+                          isZoom = true;
+                          double bearing = _isBearingActive
+                              ? calculateBearing(
+                                  _currentPosition!, lastDesination!)
+                              : 0;
+                          controller.animateCamera(
+                            CameraUpdate.newCameraPosition(
+                              CameraPosition(
+                                target: _currentPosition!,
+                                zoom: 20,
+                                tilt: 60,
+                                bearing: bearing,
                               ),
-                            );
-                          });
+                            ),
+                          );
                         });
                       },
-                      style: ElevatedButton.styleFrom(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.black,
                         backgroundColor: Colors.white,
+                        side: BorderSide(color: Colors.blue, width: 2),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
-                      child: Text(
-                        'ยกเลิกการแสดงเส้นทาง',
-                        style: TextStyle(fontSize: 14, color: Colors.black),
-                      ),
+                      child: Text('ปรับจุดกึ่งกลาง'),
                     ),
-                  ],
-                ),
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: Colors.white.withOpacity(0.9),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 10,
+                            ),
+                            Obx(
+                              () => Text(
+                                'ระยะทาง : ${action == ActionConstants.car ? distanceController.carFormat : distanceController.walkFormat}',
+                                style: TextStyle(fontSize: 15),
+                              ),
+                            )
+                          ],
+                        ),
+                        SizedBox(height: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _polylines.clear();
+                              _showCancelButton = false;
+                              _markers.clear();
+                              _showPanel = false;
+                              _cancelRoute();
+                              _routeUpdateTimer?.cancel();
+                              _routeUpdateTimer = null;
+                              _timer?.cancel();
+                              _isLoadingRoute = false;
+                              _steps.clear();
+                              _isBearingActive = !_isBearingActive;
+                              _controller.future.then((controller) {
+                                controller.animateCamera(
+                                  CameraUpdate.newCameraPosition(
+                                    CameraPosition(
+                                      target: _currentPosition!,
+                                      zoom: 19,
+                                      tilt: 0,
+                                      bearing: 0,
+                                    ),
+                                  ),
+                                );
+                              });
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 12),
+                            backgroundColor: Colors.white,
+                          ),
+                          child: Text(
+                            'ยกเลิกการแสดงเส้นทาง',
+                            style: TextStyle(fontSize: 14, color: Colors.black),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -1229,8 +1179,8 @@ class MapSampleState extends State<MapSample> {
   void startTrackingLocation() {
     _locationSubscription = Geolocator.getPositionStream(
       locationSettings: LocationSettings(
-        //ความแม่นยำ = best distanceFilter คือ การอัพเดทจุด GPS ทุกๆ2เมตร
-        accuracy: LocationAccuracy.best,
+        //ความแม่นยำ = bestForNavigation distanceFilter คือ การอัพเดทจุด GPS ทุกๆ2เมตร
+        accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: 2,
       ),
     ).listen((Position position) async {
@@ -1306,7 +1256,8 @@ class MapSampleState extends State<MapSample> {
       print('No coordinates to draw.');
       return;
     }
-
+    print('value *** ');
+    print(coordinates);
     final List<LatLng> points =
         coordinates.map((coord) => LatLng(coord[0], coord[1])).toList();
 
